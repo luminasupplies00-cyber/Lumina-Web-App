@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle, Trash2, X } from "lucide-react";
+import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle, Trash2, X, MessagesSquare, FileText } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -255,6 +255,21 @@ export default function Inbox() {
   type ThreadItem = NonNullable<typeof data>["threads"][number];
   const [selectedThread, setSelectedThread] = useState<ThreadItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [defaultViewMode, setDefaultViewMode] = useState<"single" | "conversation">(() => {
+    if (typeof window === "undefined") return "single";
+    return (window.localStorage.getItem("inbox.defaultViewMode") as "single" | "conversation") || "single";
+  });
+  const toggleDefaultViewMode = () => {
+    setDefaultViewMode((v) => {
+      const next = v === "single" ? "conversation" : "single";
+      try {
+        window.localStorage.setItem("inbox.defaultViewMode", next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -331,6 +346,23 @@ export default function Inbox() {
       <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
         <h1 className="text-2xl font-bold tracking-tight">Inbox</h1>
         <div className="flex gap-2 items-center">
+          <Button
+            variant={defaultViewMode === "conversation" ? "default" : "outline"}
+            size="sm"
+            onClick={toggleDefaultViewMode}
+            title={
+              defaultViewMode === "conversation"
+                ? "Emails will open in conversation view. Click to switch to single message."
+                : "Emails will open as a single message. Click to switch to conversation view."
+            }
+          >
+            {defaultViewMode === "conversation" ? (
+              <MessagesSquare className="h-3.5 w-3.5 mr-1.5" />
+            ) : (
+              <FileText className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {defaultViewMode === "conversation" ? "Conversation" : "Single"}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleReclassifyAll} disabled={reclassify.isPending}>
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${reclassify.isPending ? "animate-spin" : ""}`} />
             {reclassify.isPending ? "Re-classifying…" : "Re-classify All"}
@@ -558,6 +590,7 @@ export default function Inbox() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         apiBase={apiBase}
+        defaultViewMode={defaultViewMode}
       />
 
       <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>

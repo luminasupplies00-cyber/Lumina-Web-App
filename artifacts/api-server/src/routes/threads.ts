@@ -280,7 +280,7 @@ router.get("/threads/:id/conversation", async (req, res) => {
     );
     const messages = detailed
       .filter((m): m is NonNullable<typeof m> => m !== null)
-      .sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
     res.json({ messages, currentMessageId });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch conversation");

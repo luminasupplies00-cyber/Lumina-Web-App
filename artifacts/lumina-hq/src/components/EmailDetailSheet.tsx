@@ -37,8 +37,6 @@ import {
   Paperclip,
   AlertTriangle,
   Download,
-  MessagesSquare,
-  FileText,
   ChevronDown,
   ChevronRight,
   ArrowUpRight,
@@ -237,7 +235,13 @@ function ConversationView({
   );
 }
 
-export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props) {
+export function EmailDetailSheet({
+  thread,
+  open,
+  onOpenChange,
+  apiBase,
+  defaultViewMode = "single",
+}: Props & { defaultViewMode?: "single" | "conversation" }) {
   const queryClient = useQueryClient();
   const enabled = !!thread && open;
 
@@ -255,7 +259,7 @@ export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props)
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeInitial, setComposeInitial] = useState<ComposeInitial | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [viewMode, setViewMode] = useState<"single" | "conversation">("single");
+  const [viewMode, setViewMode] = useState<"single" | "conversation">(defaultViewMode);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const {
@@ -271,9 +275,9 @@ export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props)
     setSummary(null);
     setComposeInitial(null);
     setComposeOpen(false);
-    setViewMode("single");
+    setViewMode(defaultViewMode);
     setExpanded({});
-  }, [thread?.id]);
+  }, [thread?.id, defaultViewMode]);
 
   // When the conversation loads, auto-expand the current message
   useEffect(() => {
@@ -491,19 +495,6 @@ export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props)
                 </a>
               </Button>
             )}
-            <Button
-              size="sm"
-              variant={viewMode === "conversation" ? "default" : "outline"}
-              onClick={() => setViewMode((v) => (v === "single" ? "conversation" : "single"))}
-              title={viewMode === "conversation" ? "Show single message" : "Show conversation thread"}
-            >
-              {viewMode === "conversation" ? (
-                <FileText className="h-3.5 w-3.5 mr-1.5" />
-              ) : (
-                <MessagesSquare className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              {viewMode === "conversation" ? "Single" : "Conversation"}
-            </Button>
             <div className="ml-auto flex gap-1.5">
               <Button size="sm" variant="ghost" onClick={handleToggleRead} disabled={markRead.isPending} title={isRead ? "Mark unread" : "Mark read"}>
                 {isRead ? <Mail className="h-3.5 w-3.5" /> : <MailOpen className="h-3.5 w-3.5" />}
