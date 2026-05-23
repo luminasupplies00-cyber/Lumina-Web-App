@@ -462,28 +462,45 @@ export default function Inbox() {
       </div>
 
       {/* Bulk selection bar */}
-      {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border border-cyan-500/40 bg-cyan-500/[0.07]">
-          <div className="text-sm">
-            <span className="font-semibold text-cyan-300">{selectedIds.size}</span>
-            <span className="text-muted-foreground"> selected</span>
+      {selectedIds.size > 0 && (() => {
+        const visibleIds = (data?.threads ?? []).map((t) => t.id);
+        const allVisibleSelected =
+          visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+        return (
+          <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border border-cyan-500/40 bg-cyan-500/[0.07]">
+            <div className="text-sm flex items-center gap-3 flex-wrap">
+              <span>
+                <span className="font-semibold text-cyan-300">{selectedIds.size}</span>
+                <span className="text-muted-foreground"> selected</span>
+              </span>
+              {!allVisibleSelected && visibleIds.length > selectedIds.size && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-cyan-400 hover:text-cyan-300"
+                  onClick={() => setSelectedIds(new Set(visibleIds))}
+                >
+                  Select all {visibleIds.length} emails
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={clearSelection}>
+                <X className="h-3.5 w-3.5 mr-1.5" /> Clear
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setConfirmBulkDelete(true)}
+                disabled={deleteThread.isPending}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                Delete {selectedIds.size}
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={clearSelection}>
-              <X className="h-3.5 w-3.5 mr-1.5" /> Clear
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setConfirmBulkDelete(true)}
-              disabled={deleteThread.isPending}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              Delete {selectedIds.size}
-            </Button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Thread list */}
       <div className="rounded-lg border border-border divide-y divide-border">
