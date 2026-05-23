@@ -6,15 +6,27 @@ import {
   useGetThreadCounts,
   useRunSyncForAccount,
   useRunSync,
+  useDeleteThread,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle, Trash2, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { EmailDetailSheet } from "@/components/EmailDetailSheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ─── Classification config ─────────────────────────────────────────────────────
 
@@ -244,6 +256,55 @@ export default function Inbox() {
   const [selectedThread, setSelectedThread] = useState<ThreadItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const deleteThread = useDeleteThread();
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleDeleteOne = (id: number) => {
+    deleteThread.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          toast.success("Email deleted");
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          invalidateAll();
+        },
+        onError: () => toast.error("Failed to delete email"),
+      },
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setConfirmBulkDelete(false);
+    const results = await Promise.allSettled(
+      ids.map((id) => deleteThread.mutateAsync({ id })),
+    );
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - ok;
+    if (failed === 0) toast.success(`Deleted ${ok} email${ok === 1 ? "" : "s"}`);
+    else toast.error(`Deleted ${ok}, failed ${failed}`);
+    clearSelection();
+    invalidateAll();
+  };
+
   const accountsNeedingReconnect = accounts.filter((a) => a.hasWriteScope === false);
   const apiBase = "/api";
 
@@ -368,6 +429,30 @@ export default function Inbox() {
         </div>
       </div>
 
+      {/* Bulk selection bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border border-cyan-500/40 bg-cyan-500/[0.07]">
+          <div className="text-sm">
+            <span className="font-semibold text-cyan-300">{selectedIds.size}</span>
+            <span className="text-muted-foreground"> selected</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              <X className="h-3.5 w-3.5 mr-1.5" /> Clear
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setConfirmBulkDelete(true)}
+              disabled={deleteThread.isPending}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete {selectedIds.size}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Thread list */}
       <div className="rounded-lg border border-border divide-y divide-border">
         {isLoading ? (
@@ -378,6 +463,8 @@ export default function Inbox() {
           data.threads.map((thread) => {
             const isRead = (thread as { isRead?: boolean }).isRead ?? false;
             const rfqId = (thread as { rfqId?: number | null }).rfqId;
+            const isSelected = selectedIds.has(thread.id);
+            const hasAnySelected = selectedIds.size > 0;
             return (
               <div
                 key={thread.id}
@@ -394,8 +481,22 @@ export default function Inbox() {
                     setSheetOpen(true);
                   }
                 }}
-                className={`w-full text-left p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer ${!isRead ? "bg-cyan-500/[0.03]" : ""}`}
+                className={`group w-full text-left p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer ${
+                  isSelected ? "bg-cyan-500/[0.07]" : !isRead ? "bg-cyan-500/[0.03]" : ""
+                }`}
               >
+                <div
+                  className={`shrink-0 transition-opacity ${
+                    isSelected || hasAnySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+                  }`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => toggleSelected(thread.id)}
+                    aria-label="Select email"
+                  />
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                     {!isRead && <Circle className="h-2 w-2 fill-cyan-400 text-cyan-400 shrink-0" />}
@@ -414,7 +515,20 @@ export default function Inbox() {
                   <span className="text-xs text-muted-foreground">
                     {formatDistanceToNow(new Date(thread.receivedAt), { addSuffix: true })}
                   </span>
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 items-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteOne(thread.id);
+                      }}
+                      disabled={deleteThread.isPending}
+                      title="Delete email"
+                      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => { setSelectedThread(thread); setSheetOpen(true); }} title="Open email">
                       <Mail className="h-3 w-3 mr-1" /> Open
                     </Button>
@@ -445,6 +559,32 @@ export default function Inbox() {
         onOpenChange={setSheetOpen}
         apiBase={apiBase}
       />
+
+      <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size} email{selectedIds.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The selected email{selectedIds.size === 1 ? "" : "s"} will be moved to Trash in Zoho and removed from
+              this inbox view. This cannot be undone from here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={(e) => {
+                e.preventDefault();
+                void handleBulkDelete();
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Re-classify summary */}
       {reclassify.data && (
