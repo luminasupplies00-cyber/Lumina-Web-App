@@ -13,6 +13,7 @@ export const emailThreadsTable = pgTable("email_threads", {
   id: serial("id").primaryKey(),
   threadId: text("thread_id").notNull().unique(),    // Zoho-side key: "{accountId}:{messageId}"
   accountId: text("account_id"),    // Zoho accountId — links thread to a connection
+  folderId: text("folder_id"),      // Zoho folderId — required for content/details fetch
   subject: text("subject").notNull(),
   senderName: text("sender_name").notNull(),
   senderEmail: text("sender_email").notNull(),

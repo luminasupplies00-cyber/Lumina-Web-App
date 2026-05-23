@@ -18,6 +18,7 @@ const router = Router();
 
 interface ZohoMessage {
   messageId: string;
+  folderId?: string;
   subject?: string;
   fromAddress?: string;
   fromDisplayName?: string;
@@ -255,6 +256,7 @@ export async function syncAccount(
         .values({
           threadId: threadKey,
           accountId: conn.accountId,
+          folderId: message.folderId ?? null,
           subject,
           senderName,
           senderEmail,

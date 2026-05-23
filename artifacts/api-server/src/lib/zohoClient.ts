@@ -212,9 +212,26 @@ export type ZohoMessageDetail = {
   isRead?: boolean;
 };
 
+// Look up the folderId of a single message by searching the recent message list.
+// Used when an older thread row was synced before folderId was persisted.
+export async function findMessageFolderId(
+  conn: DecryptedZohoConnection,
+  messageId: string,
+): Promise<string | null> {
+  type ListResp = { data?: Array<{ messageId?: string; folderId?: string }> };
+  // Zoho `view` endpoint, scanning the most recent 200 messages.
+  const resp = (await zohoGetForConnection(
+    conn,
+    `/accounts/${conn.accountId}/messages/view?limit=200&start=1`,
+  )) as ListResp;
+  const hit = (resp.data ?? []).find((m) => m.messageId === messageId);
+  return hit?.folderId ?? null;
+}
+
 export async function fetchFullMessage(
   conn: DecryptedZohoConnection,
   messageId: string,
+  folderId: string,
 ): Promise<ZohoMessageDetail> {
   type Detail = {
     data?: {
@@ -235,11 +252,16 @@ export async function fetchFullMessage(
       }>;
     };
   };
-  const detail = (await zohoGetForConnection(
-    conn,
-    `/accounts/${conn.accountId}/messages/${messageId}`,
-  )) as Detail;
-  const data = detail.data ?? {};
+  // Zoho Mail API requires folderId in path AND separate /details + /content
+  // suffixes. /details returns metadata + attachments; /content returns HTML.
+  const base = `/accounts/${conn.accountId}/folders/${folderId}/messages/${messageId}`;
+  const [detailResp, contentResp] = await Promise.all([
+    zohoGetForConnection(conn, `${base}/details`) as Promise<Detail>,
+    zohoGetForConnection(conn, `${base}/content`).catch(() => ({ data: { content: "" } })) as Promise<{
+      data?: { content?: string };
+    }>,
+  ]);
+  const data = { ...(detailResp.data ?? {}), content: contentResp.data?.content ?? detailResp.data?.content };
   const html = data.content ?? "";
   // Strip HTML for plaintext fallback
   const text = html

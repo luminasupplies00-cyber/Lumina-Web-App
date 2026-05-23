@@ -5,6 +5,7 @@ import { and, eq, desc, ilike, or, sql, isNull, type SQL } from "drizzle-orm";
 import {
   getAllZohoConnections,
   fetchFullMessage,
+  findMessageFolderId,
   markMessageRead,
   archiveMessage,
   trashMessage,
@@ -236,7 +237,21 @@ router.get("/threads/:id/full", async (req, res) => {
       res.status(400).json({ error: "Zoho account for this thread is no longer connected" });
       return;
     }
-    const detail = await fetchFullMessage(conn, messageId);
+    let folderId = thread.folderId;
+    if (!folderId) {
+      folderId = await findMessageFolderId(conn, messageId);
+      if (!folderId) {
+        res.status(404).json({
+          error: "Message not found in recent Zoho inbox — it may have been moved or deleted",
+        });
+        return;
+      }
+      await db
+        .update(emailThreadsTable)
+        .set({ folderId })
+        .where(eq(emailThreadsTable.id, id));
+    }
+    const detail = await fetchFullMessage(conn, messageId, folderId);
     await db
       .update(emailThreadsTable)
       .set({
