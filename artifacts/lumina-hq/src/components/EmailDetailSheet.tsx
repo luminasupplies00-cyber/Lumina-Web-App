@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetThreadFull,
+  useGetThreadConversation,
   useMarkThreadRead,
   useArchiveThread,
   useDeleteThread,
@@ -36,6 +37,12 @@ import {
   Paperclip,
   AlertTriangle,
   Download,
+  MessagesSquare,
+  FileText,
+  ChevronDown,
+  ChevronRight,
+  ArrowUpRight,
+  ArrowDownLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
@@ -88,6 +95,148 @@ function formatBytes(n?: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+type ConversationMessage = {
+  messageId: string;
+  folderId: string | null;
+  fromName: string;
+  fromEmail: string;
+  toAddress: string | null;
+  subject: string | null;
+  receivedAt: string;
+  snippet: string | null;
+  bodyHtml: string;
+  bodyText: string;
+  attachments: Array<{ attachmentId: string; name: string; size?: number | null; type?: string | null }>;
+  isCurrent: boolean;
+  direction: "incoming" | "outgoing";
+};
+type ConversationData = { messages: ConversationMessage[]; currentMessageId: string };
+
+function ConversationView({
+  loading,
+  error,
+  data,
+  expanded,
+  onToggle,
+  apiBase,
+  threadId,
+}: {
+  loading: boolean;
+  error: string | null;
+  data: ConversationData | undefined;
+  expanded: Record<string, boolean>;
+  onToggle: (id: string) => void;
+  apiBase: string;
+  threadId: number;
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-12 bg-muted/30 rounded animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  }
+  const messages = data?.messages ?? [];
+  if (messages.length === 0) {
+    return <div className="text-sm text-muted-foreground italic">No other messages found in this conversation.</div>;
+  }
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-muted-foreground">
+        {messages.length} message{messages.length === 1 ? "" : "s"} in this conversation
+      </div>
+      {messages.map((m) => {
+        const isOpen = expanded[m.messageId] ?? false;
+        return (
+          <div
+            key={m.messageId}
+            className={`border rounded-md ${m.isCurrent ? "border-cyan-500/40 bg-cyan-500/[0.03]" : "border-border"}`}
+          >
+            <button
+              type="button"
+              onClick={() => onToggle(m.messageId)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/20"
+            >
+              {isOpen ? (
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              )}
+              {m.direction === "outgoing" ? (
+                <ArrowUpRight className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+              ) : (
+                <ArrowDownLeft className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium truncate">
+                  {m.fromName}
+                  <span className="text-muted-foreground font-normal"> &lt;{m.fromEmail}&gt;</span>
+                </div>
+                {!isOpen && m.snippet && (
+                  <div className="text-xs text-muted-foreground truncate">{m.snippet}</div>
+                )}
+              </div>
+              <div className="text-[11px] text-muted-foreground shrink-0">
+                {format(new Date(m.receivedAt), "MMM d, p")}
+              </div>
+            </button>
+            {isOpen && (
+              <div className="px-3 pb-3 border-t border-border/60 pt-2 space-y-2">
+                {m.toAddress && (
+                  <div className="text-[11px] text-muted-foreground">To: {m.toAddress}</div>
+                )}
+                {m.bodyHtml ? (
+                  <div
+                    className="text-sm prose-email max-w-none [&_a]:text-cyan-400 [&_a]:underline [&_img]:max-w-full [&_table]:max-w-full [&_table]:text-xs [&_*]:!font-sans"
+                    // eslint-disable-next-line react/no-danger
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(m.bodyHtml, SANITIZE_OPTS) }}
+                  />
+                ) : m.bodyText ? (
+                  <pre className="text-sm whitespace-pre-wrap font-sans text-foreground/90">{m.bodyText}</pre>
+                ) : (
+                  <div className="text-xs text-muted-foreground italic">No body content.</div>
+                )}
+                {m.attachments.length > 0 && (
+                  <div className="pt-1 space-y-1">
+                    {m.attachments.map((a) => (
+                      <a
+                        key={a.attachmentId}
+                        href={`${apiBase}/threads/${threadId}/attachments/${a.attachmentId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between p-1.5 rounded border border-border hover:bg-muted/30 text-xs"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                          <span className="truncate">{a.name}</span>
+                          {a.size != null && (
+                            <span className="text-muted-foreground shrink-0">{formatBytes(a.size)}</span>
+                          )}
+                        </div>
+                        <Download className="h-3 w-3 text-muted-foreground shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props) {
   const queryClient = useQueryClient();
   const enabled = !!thread && open;
@@ -106,13 +255,37 @@ export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props)
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeInitial, setComposeInitial] = useState<ComposeInitial | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [viewMode, setViewMode] = useState<"single" | "conversation">("single");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const {
+    data: convo,
+    isLoading: convoLoading,
+    error: convoError,
+  } = useGetThreadConversation(thread?.id ?? 0, {
+    query: { enabled: enabled && viewMode === "conversation" } as never,
+  });
 
   // Reset state when switching threads
   useEffect(() => {
     setSummary(null);
     setComposeInitial(null);
     setComposeOpen(false);
+    setViewMode("single");
+    setExpanded({});
   }, [thread?.id]);
+
+  // When the conversation loads, auto-expand the current message
+  useEffect(() => {
+    if (convo && viewMode === "conversation") {
+      const init: Record<string, boolean> = {};
+      const msgs = (convo as { messages: Array<{ messageId: string; isCurrent: boolean }> }).messages;
+      msgs.forEach((m) => {
+        init[m.messageId] = m.isCurrent;
+      });
+      setExpanded(init);
+    }
+  }, [convo, viewMode]);
 
   // After the full-fetch resolves, refresh the inbox list so unread dot clears
   const lastInvalidatedFor = useRef<number | null>(null);
@@ -318,6 +491,19 @@ export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props)
                 </a>
               </Button>
             )}
+            <Button
+              size="sm"
+              variant={viewMode === "conversation" ? "default" : "outline"}
+              onClick={() => setViewMode((v) => (v === "single" ? "conversation" : "single"))}
+              title={viewMode === "conversation" ? "Show single message" : "Show conversation thread"}
+            >
+              {viewMode === "conversation" ? (
+                <FileText className="h-3.5 w-3.5 mr-1.5" />
+              ) : (
+                <MessagesSquare className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {viewMode === "conversation" ? "Single" : "Conversation"}
+            </Button>
             <div className="ml-auto flex gap-1.5">
               <Button size="sm" variant="ghost" onClick={handleToggleRead} disabled={markRead.isPending} title={isRead ? "Mark unread" : "Mark read"}>
                 {isRead ? <Mail className="h-3.5 w-3.5" /> : <MailOpen className="h-3.5 w-3.5" />}
@@ -365,7 +551,17 @@ export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props)
               </Alert>
             )}
 
-            {isLoading ? (
+            {viewMode === "conversation" ? (
+              <ConversationView
+                loading={convoLoading}
+                error={convoError instanceof Error ? convoError.message : null}
+                data={convo as ConversationData | undefined}
+                expanded={expanded}
+                onToggle={(id) => setExpanded((e) => ({ ...e, [id]: !e[id] }))}
+                apiBase={apiBase}
+                threadId={thread.id}
+              />
+            ) : isLoading ? (
               <div className="space-y-2">
                 <div className="h-3 bg-muted/40 rounded animate-pulse" />
                 <div className="h-3 bg-muted/40 rounded animate-pulse w-5/6" />
@@ -383,7 +579,7 @@ export function EmailDetailSheet({ thread, open, onOpenChange, apiBase }: Props)
               <div className="text-sm text-muted-foreground italic">No body content.</div>
             )}
 
-            {attachments.length > 0 && (
+            {viewMode === "single" && attachments.length > 0 && (
               <div className="border-t border-border pt-3 space-y-1.5">
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                   <Paperclip className="h-3 w-3" /> Attachments ({attachments.length})

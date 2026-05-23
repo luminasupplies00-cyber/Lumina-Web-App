@@ -138,6 +138,40 @@ export interface FullEmailResponse {
   cached: boolean;
 }
 
+export type ConversationMessageDirection = typeof ConversationMessageDirection[keyof typeof ConversationMessageDirection];
+
+
+export const ConversationMessageDirection = {
+  incoming: 'incoming',
+  outgoing: 'outgoing',
+} as const;
+
+export interface ConversationMessage {
+  messageId: string;
+  /** @nullable */
+  folderId?: string | null;
+  fromName: string;
+  fromEmail: string;
+  /** @nullable */
+  toAddress?: string | null;
+  /** @nullable */
+  subject?: string | null;
+  receivedAt: string;
+  /** @nullable */
+  snippet?: string | null;
+  bodyHtml: string;
+  bodyText: string;
+  attachments: EmailAttachment[];
+  /** True for the message corresponding to the opened thread row. */
+  isCurrent: boolean;
+  direction: ConversationMessageDirection;
+}
+
+export interface ConversationResponse {
+  messages: ConversationMessage[];
+  currentMessageId: string;
+}
+
 export interface EmailSummary {
   summary: string;
   action: string;

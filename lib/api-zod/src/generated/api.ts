@@ -224,6 +224,38 @@ export const DownloadThreadAttachmentParams = zod.object({
 
 
 /**
+ * @summary Fetch all messages in the same conversation from Zoho (across folders)
+ */
+export const GetThreadConversationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetThreadConversationResponse = zod.object({
+  "messages": zod.array(zod.object({
+  "messageId": zod.string(),
+  "folderId": zod.string().nullish(),
+  "fromName": zod.string(),
+  "fromEmail": zod.string(),
+  "toAddress": zod.string().nullish(),
+  "subject": zod.string().nullish(),
+  "receivedAt": zod.string(),
+  "snippet": zod.string().nullish(),
+  "bodyHtml": zod.string(),
+  "bodyText": zod.string(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})),
+  "isCurrent": zod.boolean().describe('True for the message corresponding to the opened thread row.'),
+  "direction": zod.enum(['incoming', 'outgoing'])
+})),
+  "currentMessageId": zod.string()
+})
+
+
+/**
  * @summary Fetch full email body (HTML) + attachments from Zoho; marks as read
  */
 export const GetThreadFullParams = zod.object({

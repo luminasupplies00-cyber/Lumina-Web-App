@@ -23,6 +23,7 @@ import type {
   ArchiveThread200,
   BackfillRfqsFromThreads200,
   ComparisonResponse,
+  ConversationResponse,
   CreateRfqFromThread200,
   CustomerQuoteParams,
   CustomerQuoteRevisionResponse,
@@ -1214,6 +1215,83 @@ export function useDownloadThreadAttachment<TData = Awaited<ReturnType<typeof do
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getDownloadThreadAttachmentQueryOptions(id,attId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetThreadConversationUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}/conversation`
+}
+
+/**
+ * @summary Fetch all messages in the same conversation from Zoho (across folders)
+ */
+export const getThreadConversation = async (id: number, options?: RequestInit): Promise<ConversationResponse> => {
+
+  return customFetch<ConversationResponse>(getGetThreadConversationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetThreadConversationQueryKey = (id: number,) => {
+    return [
+    `/api/threads/${id}/conversation`
+    ] as const;
+    }
+
+
+export const getGetThreadConversationQueryOptions = <TData = Awaited<ReturnType<typeof getThreadConversation>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getThreadConversation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetThreadConversationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getThreadConversation>>> = ({ signal }) => getThreadConversation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getThreadConversation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetThreadConversationQueryResult = NonNullable<Awaited<ReturnType<typeof getThreadConversation>>>
+export type GetThreadConversationQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Fetch all messages in the same conversation from Zoho (across folders)
+ */
+
+export function useGetThreadConversation<TData = Awaited<ReturnType<typeof getThreadConversation>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getThreadConversation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetThreadConversationQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

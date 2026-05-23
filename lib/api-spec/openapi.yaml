@@ -287,6 +287,24 @@ paths:
                 type: string
                 format: binary
 
+  /threads/{id}/conversation:
+    get:
+      operationId: getThreadConversation
+      tags: [threads]
+      summary: Fetch all messages in the same conversation from Zoho (across folders)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Conversation messages, sorted oldest → newest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationResponse"
+
   /threads/{id}/full:
     get:
       operationId: getThreadFull
@@ -1280,6 +1298,52 @@ components:
             $ref: "#/components/schemas/EmailAttachment"
         cached:
           type: boolean
+
+    ConversationMessage:
+      type: object
+      required: [messageId, fromName, fromEmail, receivedAt, bodyHtml, bodyText, attachments, isCurrent, direction]
+      properties:
+        messageId:
+          type: string
+        folderId:
+          type: ["string", "null"]
+        fromName:
+          type: string
+        fromEmail:
+          type: string
+        toAddress:
+          type: ["string", "null"]
+        subject:
+          type: ["string", "null"]
+        receivedAt:
+          type: string
+        snippet:
+          type: ["string", "null"]
+        bodyHtml:
+          type: string
+        bodyText:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAttachment"
+        isCurrent:
+          type: boolean
+          description: True for the message corresponding to the opened thread row.
+        direction:
+          type: string
+          enum: [incoming, outgoing]
+
+    ConversationResponse:
+      type: object
+      required: [messages, currentMessageId]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationMessage"
+        currentMessageId:
+          type: string
 
     EmailSummary:
       type: object

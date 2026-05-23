@@ -290,6 +290,47 @@ export async function fetchFullMessage(
   return result;
 }
 
+// Normalize email subject for conversation matching: strip leading Re:/Fwd:
+// (and i18n variants like RE:, RES:, Fw:, FWD:) plus surrounding whitespace.
+export function normalizeSubject(subject: string): string {
+  let s = subject.trim();
+  // Repeatedly strip prefixes like "Re:", "Fwd:", "RES:", "FW:", in any case
+  // (handles "Re: Re: Fwd: Foo").
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const stripped = s.replace(/^(re|res|aw|antw|fw|fwd|fwd?)\s*:\s*/i, "");
+    if (stripped === s) break;
+    s = stripped;
+  }
+  return s.trim();
+}
+
+type ZohoListItem = {
+  messageId?: string;
+  folderId?: string;
+  fromAddress?: string;
+  toAddress?: string;
+  fromDisplayName?: string;
+  subject?: string;
+  summary?: string;
+  receivedTime?: string;
+};
+
+// Search Zoho across all folders by subject. Returns the most recent 50 matches.
+export async function searchMessagesBySubject(
+  conn: DecryptedZohoConnection,
+  normalizedSubject: string,
+): Promise<ZohoListItem[]> {
+  if (!normalizedSubject) return [];
+  // Zoho search expects the searchKey value to be URL-encoded.
+  const key = `subject:${normalizedSubject}`;
+  const resp = (await zohoGetForConnection(
+    conn,
+    `/accounts/${conn.accountId}/messages/search?searchKey=${encodeURIComponent(key)}&start=1&limit=50`,
+  )) as { data?: ZohoListItem[] };
+  return resp.data ?? [];
+}
+
 export async function markMessageRead(
   conn: DecryptedZohoConnection,
   messageId: string,

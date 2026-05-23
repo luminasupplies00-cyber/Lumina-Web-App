@@ -6,6 +6,8 @@ import {
   getAllZohoConnections,
   fetchFullMessage,
   findMessageFolderId,
+  searchMessagesBySubject,
+  normalizeSubject,
   markMessageRead,
   archiveMessage,
   trashMessage,
@@ -187,6 +189,103 @@ router.get("/threads/:id", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get thread");
     res.status(500).json({ error: "Failed to retrieve thread" });
+  }
+});
+
+// GET /threads/:id/conversation — return all messages in the same conversation (across folders)
+router.get("/threads/:id/conversation", async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] ?? "0");
+    const { thread, conn } = await getConnForThread(id);
+    if (!thread) {
+      res.status(404).json({ error: "Thread not found" });
+      return;
+    }
+    if (!conn) {
+      res.status(400).json({ error: "Zoho account for this thread is no longer connected" });
+      return;
+    }
+    const currentMessageId = extractMessageId(thread.threadId);
+    const normalized = normalizeSubject(thread.subject);
+    const candidates = await searchMessagesBySubject(conn, normalized);
+
+    // Ensure the current message is included (search may miss it for older items)
+    const seen = new Set<string>();
+    type Item = {
+      messageId: string;
+      folderId: string;
+      fromAddress?: string;
+      fromDisplayName?: string;
+      toAddress?: string;
+      subject?: string;
+      summary?: string;
+      receivedTime?: string;
+    };
+    const items: Item[] = [];
+    for (const c of candidates) {
+      if (!c.messageId || !c.folderId || seen.has(c.messageId)) continue;
+      // Strict normalized-subject match to avoid false positives from substring hits.
+      if (normalizeSubject(c.subject ?? "") !== normalized) continue;
+      seen.add(c.messageId);
+      const item: Item = { messageId: c.messageId, folderId: c.folderId };
+      if (c.fromAddress) item.fromAddress = c.fromAddress;
+      if (c.fromDisplayName) item.fromDisplayName = c.fromDisplayName;
+      if (c.toAddress) item.toAddress = c.toAddress;
+      if (c.subject) item.subject = c.subject;
+      if (c.summary) item.summary = c.summary;
+      if (c.receivedTime) item.receivedTime = c.receivedTime;
+      items.push(item);
+    }
+    if (!seen.has(currentMessageId) && thread.folderId) {
+      items.push({
+        messageId: currentMessageId,
+        folderId: thread.folderId,
+        fromAddress: thread.senderEmail,
+        fromDisplayName: thread.senderName,
+        subject: thread.subject,
+        summary: thread.snippet ?? undefined,
+        receivedTime: String(thread.receivedAt.getTime()),
+      });
+    }
+    // Cap to 25 to avoid runaway parallel fetches
+    const limited = items.slice(0, 25);
+    // Fetch each body in parallel (with light concurrency)
+    const detailed = await Promise.all(
+      limited.map(async (m) => {
+        try {
+          const d = await fetchFullMessage(conn, m.messageId, m.folderId);
+          const fromEmail = m.fromAddress ?? "";
+          return {
+            messageId: m.messageId,
+            folderId: m.folderId,
+            fromName: m.fromDisplayName ?? fromEmail.split("@")[0] ?? fromEmail,
+            fromEmail,
+            toAddress: m.toAddress ?? null,
+            subject: m.subject ?? null,
+            receivedAt: m.receivedTime
+              ? new Date(parseInt(m.receivedTime)).toISOString()
+              : new Date().toISOString(),
+            snippet: m.summary ?? null,
+            bodyHtml: d.bodyHtml,
+            bodyText: d.bodyText,
+            attachments: d.attachments,
+            isCurrent: m.messageId === currentMessageId,
+            direction: fromEmail.toLowerCase() === conn.email.toLowerCase() ? "outgoing" : "incoming",
+          };
+        } catch (err) {
+          req.log.warn({ err, messageId: m.messageId }, "Conversation: skipping message that failed to fetch");
+          return null;
+        }
+      }),
+    );
+    const messages = detailed
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+      .sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+    res.json({ messages, currentMessageId });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch conversation");
+    const msg = err instanceof Error ? err.message : "Failed to fetch conversation";
+    res.status(500).json({ error: msg });
   }
 });
 
