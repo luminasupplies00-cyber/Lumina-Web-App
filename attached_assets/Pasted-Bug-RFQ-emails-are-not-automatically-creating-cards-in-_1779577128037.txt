@@ -1,0 +1,62 @@
+Bug: RFQ emails are not automatically creating cards 
+in the Pipeline NEW stage.
+
+DIAGNOSE FIRST — show me:
+1. In sync.ts, what happens after an email is classified 
+   as RFQ? Is there code that creates an rfq_record?
+2. Check the database — do any rows exist in rfq_records?
+   Run: SELECT COUNT(*) FROM rfq_records;
+3. Check email_threads table — do any rows have 
+   classification = 'RFQ'?
+   Run: SELECT COUNT(*) FROM email_threads 
+        WHERE classification = 'RFQ';
+4. Is there any error being swallowed silently in the 
+   RFQ auto-creation code?
+
+Show me the answers to all 4 before changing anything.
+
+THEN FIX based on what you find.
+
+Most likely causes:
+A. Classification is still failing silently so no emails
+   are actually being stored as RFQ in the database
+B. The auto-create RFQ logic exists but has a bug
+C. The auto-create RFQ logic was never implemented —
+   classification saves to email_threads but nothing
+   creates the rfq_record row
+
+THE FIX (implement after diagnosis):
+
+In the email sync flow, after every email is classified,
+add this logic:
+
+if (classification === 'RFQ') {
+  1. Check if an rfq_record already exists for this 
+     thread_id to avoid duplicates
+  2. If not exists, create rfq_record with:
+     - email_thread_id = thread.id
+     - source_email_subject = thread.subject
+     - customer_name = rfq_data.customer_name or null
+     - customer_company = rfq_data.customer_company or null
+     - customer_email = thread.sender_email
+     - stage = 'NEW'
+     - estimated_value = null
+     - created_at = now()
+     - stage_updated_at = now()
+  3. Log: "Created RFQ record for thread: {subject}"
+}
+
+ALSO FIX:
+After implementing, add a "Create RFQ from Email" button
+on every email row in the Inbox that is classified as RFQ
+but does not have a linked rfq_record yet.
+
+This gives a manual fallback if auto-creation misses
+anything.
+
+VERIFY:
+After the fix:
+1. Trigger a sync
+2. Show me: SELECT COUNT(*) FROM rfq_records;
+3. Confirm NEW stage on Pipeline page shows cards
+4. Each card shows customer name, subject, date received
