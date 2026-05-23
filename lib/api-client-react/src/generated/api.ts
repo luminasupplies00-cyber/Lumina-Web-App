@@ -40,6 +40,7 @@ import type {
   QuoteCreatedResponse,
   QuoteRevisionInput,
   QuotesResponse,
+  ReclassifyAll200,
   RfqDetailResponse,
   RfqInput,
   RfqPipelineResponse,
@@ -2236,6 +2237,76 @@ export function useCompareSupplierQuotes<TData = Awaited<ReturnType<typeof compa
 
 
 
+
+export const getReclassifyAllUrl = () => {
+
+
+
+
+  return `/api/ai/reclassify-all`
+}
+
+/**
+ * @summary Re-classify all stored email threads using AI triage
+ */
+export const reclassifyAll = async ( options?: RequestInit): Promise<ReclassifyAll200> => {
+
+  return customFetch<ReclassifyAll200>(getReclassifyAllUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getReclassifyAllMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reclassifyAll>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reclassifyAll>>, TError,void, TContext> => {
+
+const mutationKey = ['reclassifyAll'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reclassifyAll>>, void> = () => {
+
+
+          return  reclassifyAll(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReclassifyAllMutationResult = NonNullable<Awaited<ReturnType<typeof reclassifyAll>>>
+
+    export type ReclassifyAllMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Re-classify all stored email threads using AI triage
+ */
+export const useReclassifyAll = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reclassifyAll>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reclassifyAll>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getReclassifyAllMutationOptions(options));
+    }
 
 export const getMarkDraftCopiedUrl = (draftId: number,) => {
 

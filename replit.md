@@ -21,7 +21,7 @@ B2B RFQ workflow web app for Lumina Supplies (laboratory/scientific supplies, Ri
 - API codegen: Orval (from OpenAPI spec → React Query hooks + Zod schemas)
 - Build: esbuild (CJS bundle)
 - Frontend: React + Vite + shadcn/ui (dark mode, cyan accent #190 90% 50%)
-- AI: Claude 3.5 Sonnet (`claude-3-5-sonnet-20241022`) via Anthropic API
+- AI: Claude Sonnet 4.5 (`claude-sonnet-4-5`) via Anthropic API (direct, no proxy)
 
 ## Where things live
 
@@ -64,7 +64,7 @@ B2B RFQ workflow web app for Lumina Supplies (laboratory/scientific supplies, Ri
 - Dense professional design — no large empty whitespace
 - All AI drafts must show a copy-to-clipboard flow, never auto-send
 - Currency default: SAR
-- Claude 3.5 Sonnet as primary AI model
+- Claude Sonnet 4.5 (`claude-sonnet-4-5`) as primary AI model; Haiku 4.5 for fast triage
 
 ## Gotchas
 

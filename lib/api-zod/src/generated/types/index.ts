@@ -33,6 +33,8 @@ export * from './productsResponse';
 export * from './quoteCreatedResponse';
 export * from './quoteRevisionInput';
 export * from './quotesResponse';
+export * from './reclassifyAll200';
+export * from './reclassifyAll200Counts';
 export * from './rfqDetailResponse';
 export * from './rfqInput';
 export * from './rfqPipelineResponse';

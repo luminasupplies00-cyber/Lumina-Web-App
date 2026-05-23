@@ -1,20 +1,23 @@
-import { db } from "@workspace/db";
-import { appSettingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { decrypt } from "./encrypt.js";
 import { logger } from "./logger.js";
-import { AI_MODELS } from "./aiConstants.js";
 
-interface ClaudeMessage {
-  role: "user" | "assistant";
-  content: string;
-}
+// ─── Models ───────────────────────────────────────────────────────────────────
+// Available on this account (confirmed via /v1/models):
+//   claude-sonnet-4-5  → claude-sonnet-4-5-20250929 (primary, balanced)
+//   claude-haiku-4-5-20251001                        (fast, cheap — triage)
+//   claude-opus-4-7                                  (most capable)
+export const AI_MODELS = {
+  CLAUDE: "claude-sonnet-4-5",
+  HAIKU: "claude-haiku-4-5-20251001",
+  OPUS: "claude-opus-4-7",
+} as const;
+
+export type AIModel = (typeof AI_MODELS)[keyof typeof AI_MODELS];
 
 interface ClaudeRequest {
   model: string;
   max_tokens: number;
   system?: string;
-  messages: ClaudeMessage[];
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 interface ClaudeResponse {
@@ -23,41 +26,33 @@ interface ClaudeResponse {
   usage: { input_tokens: number; output_tokens: number };
 }
 
-async function getDecryptedSetting(key: string): Promise<string | null> {
-  const rows = await db
-    .select()
-    .from(appSettingsTable)
-    .where(eq(appSettingsTable.key, key))
-    .limit(1);
-  if (!rows[0]) return null;
-  try {
-    return decrypt(rows[0].value);
-  } catch {
-    return rows[0].value;
+function getApiKey(): string {
+  const key = process.env["ANTHROPIC_API_KEY"];
+  if (!key) {
+    throw new Error(
+      "ANTHROPIC_API_KEY environment variable is not set. Add it in Replit Secrets.",
+    );
   }
+  return key;
 }
 
 export async function callClaude(opts: {
   system: string;
   userMessage: string;
   maxTokens: number;
+  model?: AIModel;
 }): Promise<string> {
-  let apiKey = await getDecryptedSetting("ANTHROPIC_API_KEY");
-  if (!apiKey) {
-    apiKey = process.env["ANTHROPIC_API_KEY"] ?? null;
-  }
-  if (!apiKey) {
-    throw new Error("Anthropic API key not configured. Add it in Settings.");
-  }
+  const apiKey = getApiKey();
+  const model = opts.model ?? AI_MODELS.CLAUDE;
 
   const body: ClaudeRequest = {
-    model: AI_MODELS.CLAUDE,
+    model,
     max_tokens: opts.maxTokens,
     system: opts.system,
     messages: [{ role: "user", content: opts.userMessage }],
   };
 
-  logger.info({ model: AI_MODELS.CLAUDE, maxTokens: opts.maxTokens }, "Calling Claude API");
+  logger.info({ model, maxTokens: opts.maxTokens }, "Calling Claude API");
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -71,7 +66,9 @@ export async function callClaude(opts: {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Claude API error ${res.status}: ${text}`);
+    throw new Error(
+      `Claude API error ${res.status} (model: ${model}): ${text}`,
+    );
   }
 
   const data = (await res.json()) as ClaudeResponse;
@@ -80,63 +77,13 @@ export async function callClaude(opts: {
   return text;
 }
 
-export async function callPerplexity(opts: {
-  system: string;
-  userMessage: string;
-  maxTokens: number;
-}): Promise<string> {
-  let apiKey = await getDecryptedSetting("PERPLEXITY_API_KEY");
-  if (!apiKey) {
-    apiKey = process.env["PERPLEXITY_API_KEY"] ?? null;
-  }
-  if (!apiKey) {
-    throw new Error("Perplexity API key not configured.");
-  }
-
-  const body = {
-    model: AI_MODELS.PERPLEXITY,
-    max_tokens: opts.maxTokens,
-    messages: [
-      { role: "system", content: opts.system },
-      { role: "user", content: opts.userMessage },
-    ],
-  };
-
-  const res = await fetch("https://api.perplexity.ai/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Perplexity API error ${res.status}: ${text}`);
-  }
-
-  const data = (await res.json()) as {
-    choices: Array<{ message: { content: string } }>;
-  };
-  const text = data.choices[0]?.message?.content;
-  if (!text) throw new Error("Perplexity returned no content");
-  return text;
-}
-
 export async function callAI(opts: {
   system: string;
   userMessage: string;
   maxTokens: number;
-  preferredModel?: "claude" | "perplexity";
+  model?: AIModel;
 }): Promise<{ text: string; model: string }> {
-  const preferred = opts.preferredModel ?? "claude";
-
-  if (preferred === "claude") {
-    const text = await callClaude(opts);
-    return { text, model: AI_MODELS.CLAUDE };
-  } else {
-    const text = await callPerplexity(opts);
-    return { text, model: AI_MODELS.PERPLEXITY };
-  }
+  const model = opts.model ?? AI_MODELS.CLAUDE;
+  const text = await callClaude({ ...opts, model });
+  return { text, model };
 }

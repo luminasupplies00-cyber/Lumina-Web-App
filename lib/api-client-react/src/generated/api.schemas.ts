@@ -583,6 +583,16 @@ classification?: string;
 search?: string;
 };
 
+export type ReclassifyAll200Counts = {[key: string]: number};
+
+export type ReclassifyAll200 = {
+  ok: boolean;
+  total: number;
+  processed: number;
+  failed: number;
+  counts: ReclassifyAll200Counts;
+};
+
 export type GetSuppliersParams = {
 includeInactive?: boolean;
 category?: string;

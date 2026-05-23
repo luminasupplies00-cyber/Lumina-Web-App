@@ -294,7 +294,7 @@ function AISettings() {
       ZOHO_ACCOUNTS_DOMAIN: "accounts.zoho.com",
       ANTHROPIC_API_KEY: "",
       PERPLEXITY_API_KEY: "",
-      AI_MODEL: "claude-3-5-sonnet-20241022",
+      AI_MODEL: "claude-sonnet-4-5",
     },
   });
 
@@ -307,7 +307,7 @@ function AISettings() {
         ZOHO_ACCOUNTS_DOMAIN: settingsData.settings.ZOHO_ACCOUNTS_DOMAIN || "accounts.zoho.com",
         ANTHROPIC_API_KEY: settingsData.settings.ANTHROPIC_API_KEY || "",
         PERPLEXITY_API_KEY: settingsData.settings.PERPLEXITY_API_KEY || "",
-        AI_MODEL: settingsData.settings.AI_MODEL || "claude-3-5-sonnet-20241022",
+        AI_MODEL: settingsData.settings.AI_MODEL || "claude-sonnet-4-5",
       });
     }
   }, [settingsData, form]);
@@ -373,7 +373,9 @@ function AISettings() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</SelectItem>
+                          <SelectItem value="claude-sonnet-4-5">Claude Sonnet 4.5 (Primary)</SelectItem>
+                          <SelectItem value="claude-opus-4-5-20251101">Claude Opus 4.5</SelectItem>
+                          <SelectItem value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</SelectItem>
                           <SelectItem value="sonar">Sonar</SelectItem>
                           <SelectItem value="sonar-pro">Sonar Pro</SelectItem>
                           <SelectItem value="sonar-reasoning">Sonar Reasoning</SelectItem>

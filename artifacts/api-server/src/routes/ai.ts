@@ -553,4 +553,86 @@ router.patch("/ai/drafts/:draftId/copied", async (req, res) => {
   }
 });
 
+// ─── Re-classify all stored email threads ─────────────────────────────────────
+router.post("/ai/reclassify-all", async (req, res) => {
+  try {
+    const { triageEmail, fetchMessageBody } = await import("./sync.js");
+    const { getAllZohoConnections } = await import("../lib/zohoClient.js");
+
+    const threads = await db.select().from(emailThreadsTable);
+
+    // Build a map of accountId → Zoho connection for body re-fetching
+    const connections = await getAllZohoConnections();
+    const connByAccountId = new Map(connections.map((c) => [c.accountId, c]));
+
+    const counts: Record<string, number> = {
+      RFQ: 0, SUPPLIER_REPLY: 0, CUSTOMER_FOLLOWUP: 0,
+      PO_INVOICE: 0, INTERNAL: 0, SPAM_NEWSLETTER: 0,
+      GENERAL: 0, UNCLASSIFIED: 0,
+    };
+    let processed = 0;
+    let failed = 0;
+
+    for (const thread of threads) {
+      try {
+        // Parse accountId:messageId from threadId
+        const colonIdx = thread.threadId.indexOf(":");
+        const accountId = colonIdx > 0 ? thread.threadId.slice(0, colonIdx) : null;
+        const messageId = colonIdx > 0 ? thread.threadId.slice(colonIdx + 1) : thread.threadId;
+
+        // Try to get full body — re-fetch from Zoho if we have the connection
+        let bodyText = thread.bodyText ?? thread.snippet ?? "";
+        let attachmentNames = "none";
+
+        if (accountId && connByAccountId.has(accountId)) {
+          const conn = connByAccountId.get(accountId)!;
+          const fetched = await fetchMessageBody(conn, messageId);
+          if (fetched.bodyText) {
+            bodyText = fetched.bodyText;
+            attachmentNames = fetched.attachmentNames;
+          }
+        }
+
+        const result = await triageEmail({
+          senderName: thread.senderName,
+          senderEmail: thread.senderEmail,
+          subject: thread.subject,
+          bodyText,
+          attachmentNames,
+        });
+
+        const isRfq = result.classification === "RFQ";
+
+        await db
+          .update(emailThreadsTable)
+          .set({
+            classification: result.classification,
+            aiConfidence: result.confidence,
+            aiReasoning: result.reasoning,
+            isRfq,
+            bodyText: bodyText || thread.bodyText,
+          })
+          .where(eq(emailThreadsTable.id, thread.id));
+
+        counts[result.classification] = (counts[result.classification] ?? 0) + 1;
+        processed++;
+      } catch (err) {
+        req.log.error({ err, threadId: thread.threadId }, "Reclassify failed for thread");
+        await db
+          .update(emailThreadsTable)
+          .set({ classification: "UNCLASSIFIED", aiConfidence: "low" })
+          .where(eq(emailThreadsTable.id, thread.id));
+        counts["UNCLASSIFIED"] = (counts["UNCLASSIFIED"] ?? 0) + 1;
+        failed++;
+      }
+    }
+
+    req.log.info({ processed, failed, counts }, "Reclassification complete");
+    res.json({ ok: true, total: threads.length, processed, failed, counts });
+  } catch (err) {
+    req.log.error({ err }, "Reclassify-all failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;

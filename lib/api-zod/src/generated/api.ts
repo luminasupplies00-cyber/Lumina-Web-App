@@ -785,6 +785,18 @@ export const CompareSupplierQuotesResponse = zod.object({
 
 
 /**
+ * @summary Re-classify all stored email threads using AI triage
+ */
+export const ReclassifyAllResponse = zod.object({
+  "ok": zod.boolean(),
+  "total": zod.number(),
+  "processed": zod.number(),
+  "failed": zod.number(),
+  "counts": zod.record(zod.string(), zod.number())
+})
+
+
+/**
  * @summary Mark a draft as copied to clipboard
  */
 export const MarkDraftCopiedParams = zod.object({

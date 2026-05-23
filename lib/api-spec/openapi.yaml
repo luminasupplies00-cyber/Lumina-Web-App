@@ -573,6 +573,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ComparisonResponse"
 
+  /ai/reclassify-all:
+    post:
+      operationId: reclassifyAll
+      tags: [ai]
+      summary: Re-classify all stored email threads using AI triage
+      responses:
+        "200":
+          description: Reclassification result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, total, processed, failed, counts]
+                properties:
+                  ok:
+                    type: boolean
+                  total:
+                    type: integer
+                  processed:
+                    type: integer
+                  failed:
+                    type: integer
+                  counts:
+                    type: object
+                    additionalProperties:
+                      type: integer
+
   /ai/drafts/{draftId}/copied:
     patch:
       operationId: markDraftCopied

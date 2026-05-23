@@ -12,6 +12,8 @@ export const emailThreadsTable = pgTable("email_threads", {
   snippet: text("snippet"),
   bodyText: text("body_text"),
   classification: text("classification"),
+  aiConfidence: text("ai_confidence"),    // "high" | "low" | "medium" | null
+  aiReasoning: text("ai_reasoning"),      // one-sentence reasoning from Claude
   isRfq: boolean("is_rfq").notNull().default(false),
   hasAttachments: boolean("has_attachments").notNull().default(false),
   attachmentParsed: boolean("attachment_parsed").notNull().default(false),
