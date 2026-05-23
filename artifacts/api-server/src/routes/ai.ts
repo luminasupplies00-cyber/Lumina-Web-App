@@ -1,0 +1,556 @@
+import { Router } from "express";
+import { db } from "@workspace/db";
+import {
+  rfqRecordsTable,
+  rfqProductsTable,
+  rfqSupplierQuotesTable,
+  rfqSupplierQuoteLinesTable,
+  rfqCustomerQuotesTable,
+  aiDraftsTable,
+  emailThreadsTable,
+} from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
+import { callAI } from "../lib/aiClient.js";
+import { AI_MAX_TOKENS } from "../lib/aiConstants.js";
+
+const router = Router();
+
+async function getRfqOrFail(id: number) {
+  const rows = await db.select().from(rfqRecordsTable).where(eq(rfqRecordsTable.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+router.post("/rfq/:id/extract-products", async (req, res) => {
+  try {
+    const rfqId = parseInt(req.params["id"] ?? "0");
+    const rfq = await getRfqOrFail(rfqId);
+    if (!rfq) {
+      res.status(404).json({ error: "RFQ not found" });
+      return;
+    }
+
+    let emailBody = "";
+    if (rfq.emailThreadId) {
+      const thread = await db
+        .select({ bodyText: emailThreadsTable.bodyText, snippet: emailThreadsTable.snippet })
+        .from(emailThreadsTable)
+        .where(eq(emailThreadsTable.id, rfq.emailThreadId))
+        .limit(1);
+      emailBody = thread[0]?.bodyText ?? thread[0]?.snippet ?? "";
+    }
+
+    if (!emailBody) {
+      res.status(400).json({
+        error: "No email body available for this RFQ.",
+        zohoLink: rfq.emailThreadId ? `https://mail.zoho.com` : null,
+      });
+      return;
+    }
+
+    const system = `You are a procurement assistant for Lumina Supplies, a B2B laboratory supplies company in Riyadh, Saudi Arabia.
+
+Extract all laboratory/scientific products mentioned in the email below.
+Return ONLY a valid JSON array. No explanation, no markdown, just the JSON array.
+
+For each product, also estimate a confidence level (high/medium/low) based on how clearly the item is described.
+
+Format:
+[
+  {
+    "product_name": "<full product name>",
+    "catalogue_number": "<cat no or null>",
+    "brand": "<brand name or null>",
+    "quantity": "<quantity and unit or null>",
+    "specifications": "<any specs or null>",
+    "extraction_confidence": "high|medium|low"
+  }
+]
+
+If no products are found, return an empty array: []`;
+
+    const { text, model } = await callAI({
+      system,
+      userMessage: emailBody,
+      maxTokens: AI_MAX_TOKENS.PRODUCT_EXTRACTION,
+    });
+
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      res.status(422).json({ error: "AI could not extract a structured product list.", rawResponse: text });
+      return;
+    }
+
+    let products: Array<{
+      product_name: string;
+      catalogue_number?: string;
+      brand?: string;
+      quantity?: string;
+      specifications?: string;
+      extraction_confidence?: string;
+    }>;
+
+    try {
+      products = JSON.parse(jsonMatch[0]);
+    } catch {
+      res.status(422).json({ error: "AI returned malformed product data", rawResponse: text });
+      return;
+    }
+
+    if (!Array.isArray(products) || products.length === 0) {
+      res.status(422).json({ error: "No products could be extracted from this email." });
+      return;
+    }
+
+    await db.delete(rfqProductsTable).where(eq(rfqProductsTable.rfqId, rfqId));
+
+    const inserted = await db
+      .insert(rfqProductsTable)
+      .values(
+        products.map((p) => ({
+          rfqId,
+          productName: p.product_name,
+          catalogueNumber: p.catalogue_number ?? null,
+          brand: p.brand ?? null,
+          quantity: p.quantity ?? null,
+          specifications: p.specifications ?? null,
+          attachmentType: "body" as const,
+          extractionConfidence: (p.extraction_confidence ?? "medium") as "high" | "medium" | "low",
+        })),
+      )
+      .returning();
+
+    res.json({ products: inserted, model });
+  } catch (err) {
+    req.log.error({ err }, "Product extraction failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.post("/rfq/:id/parse-supplier-reply", async (req, res) => {
+  try {
+    const rfqId = parseInt(req.params["id"] ?? "0");
+    const body = req.body as { emailText: string; supplierName?: string };
+
+    if (!body.emailText || body.emailText.trim().length === 0) {
+      res.status(400).json({ error: "emailText is required" });
+      return;
+    }
+
+    const rfq = await getRfqOrFail(rfqId);
+    if (!rfq) {
+      res.status(404).json({ error: "RFQ not found" });
+      return;
+    }
+
+    const system = `You are a procurement assistant parsing a supplier reply email for Lumina Supplies, a B2B laboratory supplies company in Riyadh, Saudi Arabia.
+
+Extract pricing and availability information from the supplier's reply.
+Return ONLY a valid JSON object. No explanation, no markdown.
+
+Format:
+{
+  "supplier_name": "<supplier name if found, or null>",
+  "supplier_email": "<supplier email if found, or null>",
+  "currency": "<currency code, default SAR>",
+  "notes": "<any important notes, terms, conditions, or null>",
+  "lines": [
+    {
+      "product_name": "<product description>",
+      "unit_price": "<price as string, e.g. '245.50'>",
+      "currency": "<currency code>",
+      "lead_time_days": <integer or null>,
+      "moq": "<minimum order quantity or null>",
+      "notes": "<per-line notes or null>"
+    }
+  ]
+}
+
+If prices are unclear, use your best estimate. Always include all products mentioned.`;
+
+    const { text, model } = await callAI({
+      system,
+      userMessage: body.emailText,
+      maxTokens: AI_MAX_TOKENS.SUPPLIER_QUOTE_PARSE,
+    });
+
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      res.status(422).json({ error: "AI could not parse the supplier reply.", rawResponse: text });
+      return;
+    }
+
+    let parsed: {
+      supplier_name?: string;
+      supplier_email?: string;
+      currency?: string;
+      notes?: string;
+      lines: Array<{
+        product_name: string;
+        unit_price: string;
+        currency?: string;
+        lead_time_days?: number | null;
+        moq?: string | null;
+        notes?: string | null;
+      }>;
+    };
+
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      res.status(422).json({ error: "AI returned malformed parse data", rawResponse: text });
+      return;
+    }
+
+    // Save the raw input + parsed result for audit
+    const [draft] = await db
+      .insert(aiDraftsTable)
+      .values({
+        rfqId,
+        draftType: "supplier_quote_parse",
+        content: JSON.stringify(parsed),
+        rawInput: body.emailText,
+        modelUsed: model,
+      })
+      .returning();
+
+    const result = {
+      supplierName: body.supplierName ?? parsed.supplier_name ?? null,
+      supplierEmail: parsed.supplier_email ?? null,
+      currency: parsed.currency ?? "SAR",
+      notes: parsed.notes ?? null,
+      lines: (parsed.lines ?? []).map((l) => ({
+        productName: l.product_name,
+        unitPrice: l.unit_price,
+        currency: l.currency ?? parsed.currency ?? "SAR",
+        leadTimeDays: l.lead_time_days ?? null,
+        moq: l.moq ?? null,
+        notes: l.notes ?? null,
+      })),
+    };
+
+    res.json({ parsed: result, draftId: draft?.id, model });
+  } catch (err) {
+    req.log.error({ err }, "Supplier reply parse failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.post("/rfq/:id/draft-supplier", async (req, res) => {
+  try {
+    const rfqId = parseInt(req.params["id"] ?? "0");
+    const rfq = await getRfqOrFail(rfqId);
+    if (!rfq) {
+      res.status(404).json({ error: "RFQ not found" });
+      return;
+    }
+
+    const products = await db.select().from(rfqProductsTable).where(eq(rfqProductsTable.rfqId, rfqId));
+
+    const system = `You are writing a professional supplier inquiry email on behalf of Lumina Supplies, a B2B laboratory and scientific supplies company based in Riyadh, Saudi Arabia.
+
+The email must:
+- Have a professional, concise business tone
+- Include a formatted product table with columns: Product | Cat No | Brand | Qty | Specifications
+- Request: unit price (SAR preferred), lead time, MOQ, and quote validity
+- End with a professional closing from Lumina Supplies
+
+Do not use HTML. Plain text email format only.`;
+
+    const productTable =
+      products.length > 0
+        ? products
+            .map(
+              (p, i) =>
+                `${i + 1}. ${p.productName} | ${p.catalogueNumber ?? "N/A"} | ${p.brand ?? "N/A"} | ${p.quantity ?? "N/A"} | ${p.specifications ?? "N/A"}`,
+            )
+            .join("\n")
+        : "Products to be specified";
+
+    const userMessage = `Client inquiry context:
+Customer: ${rfq.customerName}${rfq.customerCompany ? ` from ${rfq.customerCompany}` : ""}
+Urgency: ${rfq.urgency ?? rfq.intentSignal ?? "standard"}
+${rfq.deadline ? `Deadline: ${rfq.deadline}` : ""}
+
+Products needed:
+${productTable}
+
+Please draft the supplier inquiry email.`;
+
+    const { text, model } = await callAI({ system, userMessage, maxTokens: AI_MAX_TOKENS.SUPPLIER_DRAFT });
+
+    const [draft] = await db
+      .insert(aiDraftsTable)
+      .values({ rfqId, draftType: "supplier_email", content: text, modelUsed: model })
+      .returning();
+
+    res.json({ draft: text, draftId: draft?.id, model });
+  } catch (err) {
+    req.log.error({ err }, "Supplier draft failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.post("/rfq/:id/draft-customer", async (req, res) => {
+  try {
+    const rfqId = parseInt(req.params["id"] ?? "0");
+    const body = req.body as {
+      markupPercent?: number;
+      landedCostBufferPercent?: number;
+      revisionReason?: string;
+      parentQuoteId?: number;
+    };
+
+    const markup = body.markupPercent ?? 30;
+    const landedBuffer = body.landedCostBufferPercent ?? 8;
+
+    const rfq = await getRfqOrFail(rfqId);
+    if (!rfq) {
+      res.status(404).json({ error: "RFQ not found" });
+      return;
+    }
+
+    const products = await db.select().from(rfqProductsTable).where(eq(rfqProductsTable.rfqId, rfqId));
+    const quotes = await db.select().from(rfqSupplierQuotesTable).where(eq(rfqSupplierQuotesTable.rfqId, rfqId));
+
+    let pricedProducts = "";
+    let totalValue = 0;
+
+    if (quotes.length > 0) {
+      // Use the quote with the lowest total amount
+      const sorted = quotes
+        .filter((q) => q.totalAmount)
+        .sort((a, b) => parseFloat(a.totalAmount ?? "0") - parseFloat(b.totalAmount ?? "0"));
+
+      const bestQuote = sorted[0] ?? quotes[0]!;
+      const lines = await db
+        .select()
+        .from(rfqSupplierQuoteLinesTable)
+        .where(eq(rfqSupplierQuoteLinesTable.quoteId, bestQuote.id));
+
+      pricedProducts = lines
+        .map((line, i) => {
+          const cost = parseFloat(line.unitPrice);
+          let sellingPrice = "TBD";
+          if (!isNaN(cost)) {
+            const landed = cost * (1 + landedBuffer / 100);
+            const selling = landed * (1 + markup / 100);
+            sellingPrice = selling.toFixed(2);
+            totalValue += selling;
+          }
+          const product = products.find((p) => p.id === line.rfqProductId);
+          const name = product?.productName ?? line.productName ?? `Item ${i + 1}`;
+          return `${i + 1}. ${name} | ${product?.catalogueNumber ?? "N/A"} | ${product?.brand ?? "N/A"} | ${product?.quantity ?? "1"} | ${sellingPrice} ${bestQuote.currency}`;
+        })
+        .join("\n");
+    } else {
+      pricedProducts = products
+        .map(
+          (p, i) =>
+            `${i + 1}. ${p.productName} | ${p.catalogueNumber ?? "N/A"} | ${p.brand ?? "N/A"} | ${p.quantity ?? "1"} | Price TBD`,
+        )
+        .join("\n");
+    }
+
+    const isRevision = !!body.parentQuoteId;
+    const system = `You are writing a professional customer quotation email on behalf of Lumina Supplies, a B2B laboratory and scientific supplies company based in Riyadh, Saudi Arabia.
+
+The email must:
+- Begin with a professional greeting to the customer by name${isRevision ? "\n- Note this is a revised quotation (Rev ${body.parentQuoteId})" : ""}
+- Include a numbered product table: # | Description | Cat No | Brand | Qty | Unit Price (SAR) | Total (SAR)
+- State payment terms: Net 30
+- State quote validity: 30 days from date
+- End with a professional closing from Lumina Supplies team
+
+Pricing already includes landed cost buffer (${landedBuffer}%) and markup (${markup}%).
+Do not use HTML. Plain text email format only. Currency in SAR.`;
+
+    const userMessage = `Customer: ${rfq.customerName}${rfq.customerCompany ? ` at ${rfq.customerCompany}` : ""}
+${isRevision && body.revisionReason ? `Revision reason: ${body.revisionReason}` : ""}
+
+Products with selling prices:
+${pricedProducts}
+
+Please generate the professional customer quotation email.`;
+
+    const { text, model } = await callAI({ system, userMessage, maxTokens: AI_MAX_TOKENS.CUSTOMER_QUOTE });
+
+    // Get next version number
+    const existingQuotes = await db
+      .select()
+      .from(rfqCustomerQuotesTable)
+      .where(eq(rfqCustomerQuotesTable.rfqId, rfqId))
+      .orderBy(desc(rfqCustomerQuotesTable.versionNumber))
+      .limit(1);
+
+    const nextVersion = (existingQuotes[0]?.versionNumber ?? 0) + 1;
+
+    const [savedQuote] = await db
+      .insert(rfqCustomerQuotesTable)
+      .values({
+        rfqId,
+        markupPercent: markup.toString(),
+        landedCostBufferPercent: landedBuffer.toString(),
+        markupApplied: markup.toString(),
+        totalValue: totalValue > 0 ? totalValue.toFixed(2) : null,
+        currency: "SAR",
+        validityDays: 30,
+        draft: text,
+        versionNumber: nextVersion,
+        parentQuoteId: body.parentQuoteId ?? null,
+        revisionReason: body.revisionReason ?? null,
+        wasRevised: false,
+        revisionCount: 0,
+      })
+      .returning();
+
+    const [draft] = await db
+      .insert(aiDraftsTable)
+      .values({ rfqId, draftType: "customer_quote", content: text, modelUsed: model })
+      .returning();
+
+    await db
+      .update(rfqRecordsTable)
+      .set({ stage: "QUOTE_READY", stageUpdatedAt: new Date() })
+      .where(eq(rfqRecordsTable.id, rfqId));
+
+    res.json({ draft: text, draftId: draft?.id, quoteId: savedQuote?.id, versionNumber: nextVersion, model });
+  } catch (err) {
+    req.log.error({ err }, "Customer quote draft failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.get("/rfq/:id/compare", async (req, res) => {
+  try {
+    const rfqId = parseInt(req.params["id"] ?? "0");
+
+    // Get landed cost buffer — from query param or RFQ record
+    const rfq = await getRfqOrFail(rfqId);
+    const bufferFromQuery = req.query["landedCostBufferPercent"]
+      ? parseFloat(req.query["landedCostBufferPercent"] as string)
+      : null;
+    const landedBuffer = bufferFromQuery ?? parseFloat(rfq?.landedCostBufferPercent ?? "8") ?? 8;
+
+    const products = await db.select().from(rfqProductsTable).where(eq(rfqProductsTable.rfqId, rfqId));
+    const quotes = await db.select().from(rfqSupplierQuotesTable).where(eq(rfqSupplierQuotesTable.rfqId, rfqId));
+
+    const quotesWithLines = await Promise.all(
+      quotes.map(async (q) => {
+        const lines = await db.select().from(rfqSupplierQuoteLinesTable).where(eq(rfqSupplierQuoteLinesTable.quoteId, q.id));
+        return { ...q, lines };
+      }),
+    );
+
+    if (quotesWithLines.length === 0) {
+      res.json({ comparison: null, recommendation: null, quotes: [], landedCostBufferPercent: landedBuffer });
+      return;
+    }
+
+    const comparisonData = products.map((product) => {
+      const supplierPrices = quotesWithLines.map((q) => {
+        const line = q.lines.find((l) => l.rfqProductId === product.id);
+        const unitPrice = line?.unitPrice ?? null;
+        let landedUnitPrice: string | null = null;
+        let sellingUnitPrice: string | null = null;
+
+        if (unitPrice) {
+          const cost = parseFloat(unitPrice);
+          if (!isNaN(cost)) {
+            const landed = cost * (1 + landedBuffer / 100);
+            landedUnitPrice = landed.toFixed(2);
+            // Show 30% markup as default for comparison
+            sellingUnitPrice = (landed * 1.3).toFixed(2);
+          }
+        }
+
+        return {
+          supplier: q.supplierName,
+          unitPrice,
+          landedUnitPrice,
+          sellingUnitPrice,
+          currency: line?.currency ?? "SAR",
+          leadTimeDays: line?.leadTimeDays ?? null,
+          moq: line?.moq ?? null,
+        };
+      });
+      return { product: product.productName, catalogueNumber: product.catalogueNumber, supplierPrices };
+    });
+
+    const system = `You are a procurement advisor for Lumina Supplies, a B2B laboratory supplies company in Riyadh.
+Analyze the supplier quotes below and recommend the best option, considering price, lead time, and reliability.
+A ${landedBuffer}% landed cost buffer (freight/customs) is already applied to all prices.
+Be concise — 2-3 sentences maximum. State which supplier you recommend and the key reason.`;
+
+    const { text: recommendation, model } = await callAI({
+      system,
+      userMessage: JSON.stringify(comparisonData, null, 2),
+      maxTokens: AI_MAX_TOKENS.COMPARISON,
+    });
+
+    res.json({
+      comparison: comparisonData,
+      recommendation,
+      quotes: quotesWithLines,
+      model,
+      landedCostBufferPercent: landedBuffer,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Comparison failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.post("/rfq/:id/draft-followup", async (req, res) => {
+  try {
+    const rfqId = parseInt(req.params["id"] ?? "0");
+    const rfq = await getRfqOrFail(rfqId);
+    if (!rfq) {
+      res.status(404).json({ error: "RFQ not found" });
+      return;
+    }
+
+    const daysSinceStageUpdate = Math.floor(
+      (Date.now() - new Date(rfq.stageUpdatedAt).getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    const system = `You are writing a short, polite follow-up email on behalf of Lumina Supplies, a B2B laboratory supplies company in Riyadh, Saudi Arabia.
+
+The email must:
+- Reference the original quotation sent ${daysSinceStageUpdate} days ago
+- Politely ask if the customer needs any clarification or has questions
+- Keep it to 3-4 sentences maximum
+- Professional, friendly tone — not pushy
+
+Do not use HTML. Plain text only.`;
+
+    const userMessage = `Customer: ${rfq.customerName}${rfq.customerCompany ? ` at ${rfq.customerCompany}` : ""}
+Days since quote sent: ${daysSinceStageUpdate}
+
+Please draft the follow-up email.`;
+
+    const { text, model } = await callAI({ system, userMessage, maxTokens: AI_MAX_TOKENS.FOLLOWUP });
+
+    const [draft] = await db
+      .insert(aiDraftsTable)
+      .values({ rfqId, draftType: "followup", content: text, modelUsed: model })
+      .returning();
+
+    res.json({ draft: text, draftId: draft?.id, model, daysSinceStageUpdate });
+  } catch (err) {
+    req.log.error({ err }, "Follow-up draft failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.patch("/ai/drafts/:draftId/copied", async (req, res) => {
+  try {
+    const draftId = parseInt(req.params["draftId"] ?? "0");
+    await db.update(aiDraftsTable).set({ copiedAt: new Date() }).where(eq(aiDraftsTable.id, draftId));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to mark draft as copied");
+    res.status(500).json({ error: "Failed to update draft" });
+  }
+});
+
+export default router;

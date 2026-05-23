@@ -1,0 +1,330 @@
+Before you start coding, I need to update the Phase 1 scope
+based on a senior product review. These additions are required
+in Phase 1 — not Phase 2.
+
+---
+
+## CRITICAL ADDITIONS TO PHASE 1
+
+### ADDITION 1: ATTACHMENT HANDLING
+
+Most RFQs from Saudi hospitals and labs arrive as PDF or Excel
+attachments, not plain email text.
+
+Add attachment parsing to the email sync and triage flow:
+
+For PDF attachments:
+- Extract text from PDF using a PDF parsing library
+- Pass extracted text to Claude for product extraction
+- Same structured output as email body extraction
+
+For Excel (.xlsx / .xls) attachments:
+- Parse spreadsheet rows and columns
+- Identify product columns: name, cat no, brand, qty, specs
+- Map to rfq_products schema
+- Show parsed rows in extraction review UI
+
+For images (JPG, PNG — forwarded WhatsApp screenshots etc):
+- Use Claude's vision capability to read the image
+- Extract product information as best as possible
+- Flag as "needs review" with lower confidence score
+
+Add a dedicated EXTRACTION REVIEW screen:
+- Shows AI-extracted products in an editable table
+- User can:
+  - Edit any field inline
+  - Delete a row
+  - Add a missing row manually
+  - Confirm and advance to next stage
+- Must be completed before RFQ can advance from NEW stage
+- This is a financial risk control, not just a UX nicety
+
+Update database:
+- Add attachment_parsed boolean to email_threads
+- Add attachment_type field to rfq_products
+  (body | pdf | excel | image)
+- Add extraction_confidence field to rfq_products
+  (high | medium | low | manual)
+- Add extraction_reviewed boolean to rfq_records
+- Add extraction_reviewed_at timestamp
+
+---
+
+### ADDITION 2: SUPPLIER DATABASE
+
+Add a supplier management module so the system knows
+which suppliers to contact for which products.
+
+New page: /suppliers
+
+Database tables to add:
+
+suppliers:
+- id
+- name
+- company
+- email
+- phone
+- country
+- currency (SAR / USD / EUR / GBP)
+- typical_lead_time_days
+- typical_response_time_hours
+- payment_terms
+- notes
+- is_active
+- created_at
+- updated_at
+
+supplier_categories:
+- id
+- supplier_id
+- category (from list below)
+- is_preferred boolean
+- notes
+
+Product categories for Lumina Supplies:
+- Lab Equipment & Instruments
+- Reagents & Chemicals
+- Consumables & Plasticware
+- Glassware
+- Life Science & Kits
+- PPE & Safety
+- Environmental Monitoring
+- Diagnostics
+- Refrigeration & Storage
+- General Lab Supplies
+
+supplier_performance:
+- id
+- supplier_id
+- rfq_id
+- was_contacted boolean
+- responded boolean
+- response_time_hours
+- fulfilled_all_items boolean
+- selected boolean
+- selection_reason (price | lead_time | availability | preferred)
+- recorded_at
+
+Supplier page features:
+- Add / edit / deactivate suppliers
+- Assign product categories per supplier
+- View supplier performance metrics:
+  - Average response time
+  - Response rate %
+  - Selection rate %
+  - Average lead time
+
+Smart supplier selection on RFQ:
+- When a new RFQ is created, based on extracted product
+  categories, suggest relevant suppliers automatically
+- Show suggested suppliers on the RFQ card with checkboxes
+- User selects which suppliers to contact
+- System remembers selections to improve future suggestions
+
+---
+
+### ADDITION 3: EXTRACTION REVIEW UI
+
+As described in Addition 1, add a dedicated review step.
+
+This screen appears after AI extraction runs on an RFQ.
+
+Layout:
+- Header: RFQ details (customer, email subject, date)
+- Extracted products table (editable):
+  - Product name (editable)
+  - Catalogue number (editable)
+  - Brand (editable)
+  - Quantity (editable, number input)
+  - Specifications (editable)
+  - Confidence badge (High / Medium / Low / Manual)
+  - Delete row button
+- "Add Product Manually" button adds empty row
+- Source toggle: show original email / attachment side by side
+- "Confirm & Start Sourcing" button
+  - validates at least 1 product exists
+  - marks extraction_reviewed = true
+  - advances RFQ to SOURCING stage
+
+---
+
+### ADDITION 4: QUOTE VERSIONING
+
+Customers frequently ask for revised quotes.
+Add versioning so Quote v2 can be created from Quote v1.
+
+Add to rfq_customer_quotes:
+- version_number (integer, starts at 1)
+- parent_quote_id (self-reference for revisions)
+- revision_reason (text, optional)
+- changes_summary (text, optional)
+
+On Quote Ready or Quote Sent cards:
+- "Create Revised Quote" button
+- Creates new quote record linked to parent
+- Pre-populates with previous quote data
+- User adjusts pricing or products
+- New draft generated with revision note
+
+Show version history on RFQ card:
+- Quote v1 — sent 3 days ago
+- Quote v2 — current
+
+---
+
+### ADDITION 5: SUPPLIER QUOTE FAST-ENTRY
+
+Logging supplier quotes must take under 30 seconds.
+The current form design is too slow for production use.
+
+Add a "Parse Supplier Reply" feature on the quote log form:
+- Paste the supplier's reply email text into a text area
+- Click "Parse with AI"
+- Claude extracts: prices, lead times, MOQs, currency
+- Pre-fills the quote form fields automatically
+- User reviews and confirms in one click
+
+This eliminates manual data entry for supplier quotes.
+
+max_tokens for supplier quote parsing: 600
+
+Add to ai_drafts:
+- draft_type = "supplier_quote_parse"
+- Store raw supplier email and parsed result for audit
+
+---
+
+### ADDITION 6: CRITICAL DATA CAPTURE FIELDS
+
+Add these fields now so Phase 2 analytics work correctly.
+
+On rfq_records add:
+- source_channel (inbound_email | referral | existing_account |
+  cold_outreach | tender | unknown)
+- customer_segment (anchor | builder | casual | prospect)
+  — Anchor: top accounts, Builder: growing, Casual: occasional
+- intent_signal (urgent | standard | price_shopping | unknown)
+  — AI classifies this during triage
+- time_to_first_supplier_contact (computed, minutes)
+- time_to_customer_quote (computed, minutes)
+- suppliers_contacted_count (integer)
+- suppliers_responded_count (integer)
+- lost_reason (price | lead_time | unresponsive |
+  went_elsewhere | budget | other | null)
+  — shown as dropdown when moving to LOST stage
+
+On rfq_customer_quotes add:
+- markup_applied (decimal)
+- landed_cost_buffer_percent (decimal, default 8%)
+  — added before markup to account for freight/customs
+- was_revised (boolean)
+- revision_count (integer)
+
+On rfq_supplier_quotes add:
+- response_time_hours (computed from rfq creation)
+- fulfilled_all_items (boolean)
+- partial_fulfillment_notes (text)
+
+---
+
+### ADDITION 7: LANDED COST BUFFER
+
+The markup calculator must account for freight and customs.
+
+Update the comparison table markup calculator:
+
+Formula:
+Landed Cost = Supplier Price × (1 + landed_cost_buffer%)
+Selling Price = Landed Cost × (1 + markup%)
+
+Add to comparison table UI:
+- Landed cost buffer % field (default 8%, editable per RFQ)
+- Shows: Supplier Price → Landed Cost → Selling Price
+- Tooltip explaining what the buffer covers
+
+This prevents accidentally quoting below actual cost.
+
+---
+
+### ADDITION 8: STUCK RFQ ALERTS
+
+Add automatic detection of stuck RFQs.
+
+Business rules:
+- NEW stage > 4 hours during business hours → flag as stuck
+- SOURCING stage > 48 hours → flag as stuck
+- COMPARING stage > 24 hours → flag as stuck
+- QUOTE READY stage > 4 hours → flag as stuck
+- QUOTE SENT stage > 3 days → flag for follow-up
+- FOLLOW UP stage > 5 days without action → escalate
+
+Show stuck flags:
+- Red indicator on RFQ card
+- Count in metrics strip ("X stuck")
+- Sorted to top within their stage section
+
+---
+
+### UPDATED DATABASE SUMMARY
+
+In addition to original tables, add:
+- suppliers
+- supplier_categories
+- supplier_performance
+- Update rfq_records with new fields
+- Update rfq_customer_quotes with versioning + landed cost
+- Update rfq_supplier_quotes with performance fields
+- Update rfq_products with confidence and source fields
+
+---
+
+### UPDATED IMPLEMENTATION ORDER
+
+1. Database schema (updated with all new tables and fields)
+2. Settings API
+3. Supplier database (CRUD before OAuth — needed by RFQ)
+4. Zoho OAuth flow
+5. Email sync with attachment detection
+6. AI triage with intent signal classification
+7. Attachment parsing (PDF, Excel, image)
+8. Frontend scaffold
+9. RFQ Pipeline page with extraction review UI
+10. Supplier suggestion on new RFQ
+11. AI product extraction with confidence scoring
+12. Extraction review screen (edit + confirm)
+13. Supplier draft with smart supplier selection
+14. Supplier quote fast-entry with AI parse
+15. Comparison table with landed cost buffer
+16. Customer quote draft with versioning
+17. Follow-up flagging and draft
+18. Stuck RFQ detection and flags
+19. Inbox page
+20. Suppliers page
+21. Settings page
+22. Tests
+
+---
+
+### DONE MEANS (UPDATED)
+
+Phase 1 is complete only when ALL of these work
+with real Zoho Mail data:
+
+1. Zoho Mail OAuth connects successfully
+2. Real emails sync including attachments
+3. PDF and Excel attachments are parsed for products
+4. RFQ emails auto-detected and classified with intent signal
+5. Extraction review screen shows editable product table
+6. Supplier database has at least basic CRUD
+7. Supplier suggestions appear based on product categories
+8. Supplier email draft uses suggested suppliers
+9. Supplier quote fast-entry parses pasted email text
+10. Comparison table shows landed cost calculation
+11. Customer quote draft generates with correct pricing
+12. Quote versioning works (v1 → v2 revision)
+13. Stuck RFQ flags appear correctly
+14. RFQ moves through all stages
+15. Metrics strip shows correct live counts
+
+Do not mark Phase 1 done until all 15 work.

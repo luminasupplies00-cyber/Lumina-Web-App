@@ -1,45 +1,81 @@
-# [Project name]
+# Lumina HQ
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+B2B RFQ workflow web app for Lumina Supplies (laboratory/scientific supplies, Riyadh, Saudi Arabia).
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/lumina-hq run dev` — run the frontend (port 22509)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec (always run after editing openapi.yaml)
+- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only, never run in production)
 - Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
+- API: Express 5, port 8080 (proxied via /api)
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
+- API codegen: Orval (from OpenAPI spec → React Query hooks + Zod schemas)
 - Build: esbuild (CJS bundle)
+- Frontend: React + Vite + shadcn/ui (dark mode, cyan accent #190 90% 50%)
+- AI: Claude 3.5 Sonnet (`claude-3-5-sonnet-20241022`) via Anthropic API
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — **source of truth** for all API contracts
+- `lib/db/src/schema/index.ts` — **source of truth** for DB schema (12 tables)
+- `lib/api-client-react/src/generated/` — generated React Query hooks (do not edit)
+- `lib/api-zod/src/generated/` — generated Zod schemas (do not edit)
+- `artifacts/api-server/src/routes/` — Express route handlers
+- `artifacts/api-server/src/lib/` — server utilities (aiClient, encrypt, stuckRfq, aiConstants)
+- `artifacts/lumina-hq/src/pages/` — frontend pages (rfq, inbox, suppliers, settings)
+- `artifacts/lumina-hq/src/components/` — shared components (layout, ui/)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Contract-first API: openapi.yaml is always edited first, then `codegen` is run
+- AI drafts are never auto-sent — always show to user for review/copy
+- Landed cost buffer (default 8%) applied at comparison time, configurable per RFQ
+- Stuck RFQ detection is server-side (thresholds in `lib/stuckRfq.ts`), returned with each GET /rfq
+- AES-256-GCM encryption for OAuth tokens stored in DB (key: `ENCRYPTION_KEY` secret)
+- Zoho Mail OAuth tokens refreshed lazily on each sync cycle
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **Pipeline** — Kanban board: NEW → SOURCING → COMPARING → QUOTE_READY → QUOTE_SENT → FOLLOW_UP → WON/LOST
+- **Inbox** — Synced Zoho Mail threads with AI triage/classification
+- **Suppliers** — Full CRUD supplier database with categories, performance metrics, smart suggestions
+- **Settings** — Zoho OAuth connection, AI model config, sync settings
+
+### Key workflows
+1. Email arrives → AI triage → RFQ created → Extract Products (AI) → Review & Confirm → Move to SOURCING
+2. SOURCING → Draft supplier inquiry (AI) → Log supplier quotes (manual or AI email paste) → COMPARING
+3. COMPARING → Comparison table with landed cost per product → AI recommendation → Draft customer quote (AI) → QUOTE_READY
+4. QUOTE_READY → Copy quote → Send manually via Zoho → QUOTE_SENT
+5. QUOTE_SENT/FOLLOW_UP → Draft follow-up (AI) → WON or LOST
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Dark mode only — no light mode
+- Cyan accent: `hsl(190 90% 50%)`
+- Dense professional design — no large empty whitespace
+- All AI drafts must show a copy-to-clipboard flow, never auto-send
+- Currency default: SAR
+- Claude 3.5 Sonnet as primary AI model
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- **Always run `codegen` after editing `openapi.yaml`** — generated hooks will be stale otherwise
+- **Never call service ports directly from bash** — use `localhost:80/api/...` (the shared proxy)
+- **Never use `console.log` in server code** — use `req.log` in routes, `logger` elsewhere (pino)
+- `pnpm run typecheck:libs` must succeed before `pnpm run typecheck` (leaf packages depend on built lib types)
+- Stuck RFQ thresholds: NEW>4h, SOURCING>48h, COMPARING>24h, QUOTE_READY>4h, QUOTE_SENT>72h, FOLLOW_UP>120h
 
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- AI token limits: EMAIL_TRIAGE=800, PRODUCT_EXTRACTION=800, SUPPLIER_DRAFT=600, CUSTOMER_QUOTE=800, COMPARISON=400, FOLLOWUP=300, SUPPLIER_QUOTE_PARSE=600
+- RFQ stages enum: `RFQ_STAGES` from `@workspace/db`

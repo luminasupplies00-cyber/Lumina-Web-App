@@ -1,22 +1,32 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Lumina HQ API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: settings
+    description: App settings
+  - name: zoho
+    description: Zoho Mail OAuth and sync
+  - name: threads
+    description: Email threads
+  - name: rfq
+    description: RFQ Pipeline
+  - name: ai
+    description: AI features
+  - name: suppliers
+    description: Supplier database
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +34,1581 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get all app settings (sensitive values masked)
+      responses:
+        "200":
+          description: Settings map
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsResponse"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Save settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /auth/zoho/connect:
+    get:
+      operationId: getZohoAuthUrl
+      tags: [zoho]
+      summary: Get Zoho OAuth authorization URL
+      responses:
+        "200":
+          description: Auth URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZohoAuthUrl"
+
+  /auth/zoho/status:
+    get:
+      operationId: getZohoStatus
+      tags: [zoho]
+      summary: Get Zoho connection status
+      responses:
+        "200":
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZohoStatus"
+
+  /auth/zoho/disconnect:
+    delete:
+      operationId: disconnectZoho
+      tags: [zoho]
+      summary: Disconnect Zoho Mail
+      responses:
+        "200":
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /sync/run:
+    post:
+      operationId: runSync
+      tags: [zoho]
+      summary: Trigger Zoho inbox sync and AI triage
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+
+  /sync/status:
+    get:
+      operationId: getSyncStatus
+      tags: [zoho]
+      summary: Get last sync time and connection status
+      responses:
+        "200":
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncStatus"
+
+  /threads:
+    get:
+      operationId: getThreads
+      tags: [threads]
+      summary: Get all synced email threads
+      parameters:
+        - in: query
+          name: classification
+          schema:
+            type: string
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thread list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadsResponse"
+
+  /threads/{id}:
+    get:
+      operationId: getThread
+      tags: [threads]
+      summary: Get single thread
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Thread
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadResponse"
+
+  /rfq:
+    get:
+      operationId: getRfqs
+      tags: [rfq]
+      summary: Get all RFQs grouped by stage with metrics
+      responses:
+        "200":
+          description: RFQ pipeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RfqPipelineResponse"
+    post:
+      operationId: createRfq
+      tags: [rfq]
+      summary: Create a new RFQ manually
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RfqInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RfqRecordResponse"
+
+  /rfq/{id}:
+    get:
+      operationId: getRfq
+      tags: [rfq]
+      summary: Get single RFQ with products, quotes, and thread
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: RFQ detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RfqDetailResponse"
+    patch:
+      operationId: updateRfq
+      tags: [rfq]
+      summary: Update RFQ notes or estimated value
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RfqUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RfqRecordResponse"
+
+  /rfq/{id}/stage:
+    patch:
+      operationId: updateRfqStage
+      tags: [rfq]
+      summary: Move RFQ to a new stage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StageUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RfqRecordResponse"
+
+  /rfq/{id}/confirm-extraction:
+    post:
+      operationId: confirmExtraction
+      tags: [rfq]
+      summary: Confirm reviewed product extraction and advance to SOURCING
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractionConfirmInput"
+      responses:
+        "200":
+          description: Confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractionConfirmResponse"
+
+  /rfq/{id}/quotes:
+    get:
+      operationId: getRfqQuotes
+      tags: [rfq]
+      summary: Get all supplier quotes for an RFQ
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Quotes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotesResponse"
+    post:
+      operationId: logSupplierQuote
+      tags: [rfq]
+      summary: Log a supplier quote and move to COMPARING
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierQuoteInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteCreatedResponse"
+
+  /rfq/{id}/suggested-suppliers:
+    get:
+      operationId: getSuggestedSuppliers
+      tags: [rfq]
+      summary: Get suggested suppliers based on RFQ product categories
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Suggested suppliers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuggestedSuppliersResponse"
+
+  /rfq/{id}/customer-quotes:
+    get:
+      operationId: getCustomerQuotes
+      tags: [rfq]
+      summary: Get all customer quote versions for an RFQ
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer quotes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerQuotesResponse"
+
+  /rfq/{id}/customer-quotes/{quoteId}/revise:
+    post:
+      operationId: reviseCustomerQuote
+      tags: [rfq]
+      summary: Create a revised version of a customer quote
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: quoteId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteRevisionInput"
+      responses:
+        "201":
+          description: New revision created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerQuoteRevisionResponse"
+
+  /rfq/{id}/extract-products:
+    post:
+      operationId: extractProducts
+      tags: [ai]
+      summary: AI-extract product list from email body or attachments
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Extracted products
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductsResponse"
+
+  /rfq/{id}/parse-supplier-reply:
+    post:
+      operationId: parseSupplierReply
+      tags: [ai]
+      summary: AI-parse pasted supplier reply email to pre-fill quote form
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParseSupplierReplyInput"
+      responses:
+        "200":
+          description: Parsed quote data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParsedSupplierReplyResponse"
+
+  /rfq/{id}/draft-supplier:
+    post:
+      operationId: draftSupplierEmail
+      tags: [ai]
+      summary: AI-generate supplier inquiry email draft
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Draft content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftResponse"
+
+  /rfq/{id}/draft-customer:
+    post:
+      operationId: draftCustomerQuote
+      tags: [ai]
+      summary: AI-generate customer quotation email draft
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerQuoteParams"
+      responses:
+        "200":
+          description: Draft content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftResponse"
+
+  /rfq/{id}/draft-followup:
+    post:
+      operationId: draftFollowup
+      tags: [ai]
+      summary: AI-generate follow-up email draft
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Draft content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowupDraftResponse"
+
+  /rfq/{id}/compare:
+    get:
+      operationId: compareSupplierQuotes
+      tags: [ai]
+      summary: Get supplier comparison table with landed cost and AI recommendation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Comparison data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComparisonResponse"
+
+  /ai/drafts/{draftId}/copied:
+    patch:
+      operationId: markDraftCopied
+      tags: [ai]
+      summary: Mark a draft as copied to clipboard
+      parameters:
+        - in: path
+          name: draftId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /suppliers:
+    get:
+      operationId: getSuppliers
+      tags: [suppliers]
+      summary: List all active suppliers
+      parameters:
+        - in: query
+          name: includeInactive
+          schema:
+            type: boolean
+        - in: query
+          name: category
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Suppliers list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuppliersResponse"
+    post:
+      operationId: createSupplier
+      tags: [suppliers]
+      summary: Create a new supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierDetailResponse"
+
+  /suppliers/{id}:
+    get:
+      operationId: getSupplier
+      tags: [suppliers]
+      summary: Get a supplier with categories
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierDetailResponse"
+    patch:
+      operationId: updateSupplier
+      tags: [suppliers]
+      summary: Update a supplier
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierUpdateInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierDetailResponse"
+    delete:
+      operationId: deactivateSupplier
+      tags: [suppliers]
+      summary: Deactivate a supplier
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /suppliers/{id}/categories:
+    post:
+      operationId: addSupplierCategory
+      tags: [suppliers]
+      summary: Add a product category to a supplier
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierCategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCategoryResponse"
+
+  /suppliers/{id}/categories/{catId}:
+    delete:
+      operationId: removeSupplierCategory
+      tags: [suppliers]
+      summary: Remove a category from a supplier
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: catId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /suppliers/{id}/performance:
+    get:
+      operationId: getSupplierPerformance
+      tags: [suppliers]
+      summary: Get supplier performance metrics
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Performance data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPerformanceResponse"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    SettingsResponse:
+      type: object
+      required: [settings]
+      properties:
+        settings:
+          type: object
+          additionalProperties:
+            type: string
+
+    SettingsInput:
+      type: object
+      additionalProperties:
+        type: string
+
+    ZohoAuthUrl:
+      type: object
+      required: [authUrl]
+      properties:
+        authUrl:
+          type: string
+
+    ZohoStatus:
+      type: object
+      required: [connected]
+      properties:
+        connected:
+          type: boolean
+        email:
+          type: ["string", "null"]
+        accountId:
+          type: ["string", "null"]
+        connectedAt:
+          type: ["string", "null"]
+        lastSyncedAt:
+          type: ["string", "null"]
+        tokenExpiry:
+          type: ["string", "null"]
+
+    SyncResult:
+      type: object
+      required: [ok, synced, rfqsCreated]
+      properties:
+        ok:
+          type: boolean
+        synced:
+          type: integer
+        rfqsCreated:
+          type: integer
+
+    SyncStatus:
+      type: object
+      required: [connected]
+      properties:
+        connected:
+          type: boolean
+        email:
+          type: ["string", "null"]
+        lastSyncedAt:
+          type: ["string", "null"]
+
+    EmailThread:
+      type: object
+      required: [id, threadId, subject, senderName, senderEmail, receivedAt, isRfq, syncedAt]
+      properties:
+        id:
+          type: integer
+        threadId:
+          type: string
+        subject:
+          type: string
+        senderName:
+          type: string
+        senderEmail:
+          type: string
+        receivedAt:
+          type: string
+        snippet:
+          type: ["string", "null"]
+        bodyText:
+          type: ["string", "null"]
+        classification:
+          type: ["string", "null"]
+        isRfq:
+          type: boolean
+        hasAttachments:
+          type: boolean
+        attachmentParsed:
+          type: boolean
+        attachmentType:
+          type: ["string", "null"]
+        syncedAt:
+          type: string
+
+    ThreadsResponse:
+      type: object
+      required: [threads]
+      properties:
+        threads:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailThread"
+
+    ThreadResponse:
+      type: object
+      required: [thread]
+      properties:
+        thread:
+          $ref: "#/components/schemas/EmailThread"
+
+    RfqRecord:
+      type: object
+      required: [id, customerName, stage, currency, stageUpdatedAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        emailThreadId:
+          type: ["integer", "null"]
+        customerName:
+          type: string
+        customerCompany:
+          type: ["string", "null"]
+        customerEmail:
+          type: ["string", "null"]
+        stage:
+          type: string
+        estimatedValue:
+          type: ["string", "null"]
+        currency:
+          type: string
+        assignedTo:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        urgency:
+          type: ["string", "null"]
+        deadline:
+          type: ["string", "null"]
+        aiNextAction:
+          type: ["string", "null"]
+        sourceChannel:
+          type: ["string", "null"]
+        customerSegment:
+          type: ["string", "null"]
+        intentSignal:
+          type: ["string", "null"]
+        extractionReviewed:
+          type: boolean
+        extractionReviewedAt:
+          type: ["string", "null"]
+        lostReason:
+          type: ["string", "null"]
+        landedCostBufferPercent:
+          type: ["string", "null"]
+        isStuck:
+          type: boolean
+        stuckSince:
+          type: ["string", "null"]
+        stageUpdatedAt:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        emailSubject:
+          type: ["string", "null"]
+        zohoThreadId:
+          type: ["string", "null"]
+
+    RfqProduct:
+      type: object
+      required: [id, rfqId, productName, attachmentType, extractionConfidence]
+      properties:
+        id:
+          type: integer
+        rfqId:
+          type: integer
+        productName:
+          type: string
+        catalogueNumber:
+          type: ["string", "null"]
+        brand:
+          type: ["string", "null"]
+        quantity:
+          type: ["string", "null"]
+        specifications:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        attachmentType:
+          type: string
+        extractionConfidence:
+          type: string
+
+    RfqWithProducts:
+      allOf:
+        - $ref: "#/components/schemas/RfqRecord"
+        - type: object
+          required: [products]
+          properties:
+            products:
+              type: array
+              items:
+                $ref: "#/components/schemas/RfqProduct"
+
+    PipelineMetrics:
+      type: object
+      required: [newToday, inSourcing, awaitingCustomer, wonThisMonth, totalPipelineValue, currency, stuckCount]
+      properties:
+        newToday:
+          type: integer
+        inSourcing:
+          type: integer
+        awaitingCustomer:
+          type: integer
+        wonThisMonth:
+          type: integer
+        totalPipelineValue:
+          type: number
+        currency:
+          type: string
+        stuckCount:
+          type: integer
+
+    RfqPipelineResponse:
+      type: object
+      required: [rfqs, metrics]
+      properties:
+        rfqs:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/RfqWithProducts"
+        metrics:
+          $ref: "#/components/schemas/PipelineMetrics"
+
+    RfqRecordResponse:
+      type: object
+      required: [rfq]
+      properties:
+        rfq:
+          $ref: "#/components/schemas/RfqRecord"
+
+    RfqInput:
+      type: object
+      required: [customerName]
+      properties:
+        customerName:
+          type: string
+        customerCompany:
+          type: string
+        customerEmail:
+          type: string
+        emailThreadId:
+          type: integer
+        notes:
+          type: string
+        sourceChannel:
+          type: string
+
+    RfqUpdate:
+      type: object
+      properties:
+        notes:
+          type: string
+        estimatedValue:
+          type: string
+        customerName:
+          type: string
+        customerCompany:
+          type: string
+        aiNextAction:
+          type: string
+        lostReason:
+          type: string
+        landedCostBufferPercent:
+          type: string
+
+    StageUpdate:
+      type: object
+      required: [stage]
+      properties:
+        stage:
+          type: string
+        lostReason:
+          type: string
+
+    ExtractionReviewProduct:
+      type: object
+      required: [productName]
+      properties:
+        id:
+          type: integer
+        productName:
+          type: string
+        catalogueNumber:
+          type: string
+        brand:
+          type: string
+        quantity:
+          type: string
+        specifications:
+          type: string
+        notes:
+          type: string
+        extractionConfidence:
+          type: string
+
+    ExtractionConfirmInput:
+      type: object
+      required: [products]
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExtractionReviewProduct"
+
+    ExtractionConfirmResponse:
+      type: object
+      required: [ok, products, rfq]
+      properties:
+        ok:
+          type: boolean
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/RfqProduct"
+        rfq:
+          $ref: "#/components/schemas/RfqRecord"
+
+    SupplierQuoteLineInput:
+      type: object
+      required: [unitPrice]
+      properties:
+        rfqProductId:
+          type: integer
+        productName:
+          type: string
+        unitPrice:
+          type: string
+        currency:
+          type: string
+        leadTimeDays:
+          type: integer
+        moq:
+          type: string
+        notes:
+          type: string
+
+    SupplierQuoteInput:
+      type: object
+      required: [supplierName, lines]
+      properties:
+        supplierName:
+          type: string
+        supplierEmail:
+          type: string
+        totalAmount:
+          type: number
+        currency:
+          type: string
+        notes:
+          type: string
+        fulfilledAllItems:
+          type: boolean
+        partialFulfillmentNotes:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierQuoteLineInput"
+
+    SupplierQuoteLine:
+      type: object
+      required: [id, quoteId, unitPrice, currency]
+      properties:
+        id:
+          type: integer
+        quoteId:
+          type: integer
+        rfqProductId:
+          type: ["integer", "null"]
+        productName:
+          type: ["string", "null"]
+        unitPrice:
+          type: string
+        currency:
+          type: string
+        leadTimeDays:
+          type: ["integer", "null"]
+        moq:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    SupplierQuote:
+      type: object
+      required: [id, rfqId, supplierName, quotedAt, lines]
+      properties:
+        id:
+          type: integer
+        rfqId:
+          type: integer
+        supplierName:
+          type: string
+        supplierEmail:
+          type: ["string", "null"]
+        totalAmount:
+          type: ["string", "null"]
+        currency:
+          type: string
+        notes:
+          type: ["string", "null"]
+        quotedAt:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierQuoteLine"
+
+    QuotesResponse:
+      type: object
+      required: [quotes]
+      properties:
+        quotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierQuote"
+
+    QuoteCreatedResponse:
+      type: object
+      required: [quote]
+      properties:
+        quote:
+          $ref: "#/components/schemas/SupplierQuote"
+
+    RfqDetailResponse:
+      type: object
+      required: [rfq, products, quotes]
+      properties:
+        rfq:
+          $ref: "#/components/schemas/RfqRecord"
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/RfqProduct"
+        quotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierQuote"
+        thread:
+          $ref: "#/components/schemas/EmailThread"
+
+    ProductsResponse:
+      type: object
+      required: [products]
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/RfqProduct"
+        model:
+          type: string
+
+    DraftResponse:
+      type: object
+      required: [draft]
+      properties:
+        draft:
+          type: string
+        draftId:
+          type: ["integer", "null"]
+        model:
+          type: string
+
+    FollowupDraftResponse:
+      type: object
+      required: [draft, daysSinceStageUpdate]
+      properties:
+        draft:
+          type: string
+        draftId:
+          type: ["integer", "null"]
+        model:
+          type: string
+        daysSinceStageUpdate:
+          type: integer
+
+    CustomerQuoteParams:
+      type: object
+      properties:
+        markupPercent:
+          type: number
+        landedCostBufferPercent:
+          type: number
+        revisionReason:
+          type: string
+        parentQuoteId:
+          type: integer
+
+    ParseSupplierReplyInput:
+      type: object
+      required: [emailText]
+      properties:
+        emailText:
+          type: string
+        supplierName:
+          type: string
+
+    ParsedSupplierReplyResponse:
+      type: object
+      required: [parsed]
+      properties:
+        parsed:
+          $ref: "#/components/schemas/ParsedQuoteData"
+        draftId:
+          type: ["integer", "null"]
+        model:
+          type: string
+
+    ParsedQuoteData:
+      type: object
+      properties:
+        supplierName:
+          type: ["string", "null"]
+        supplierEmail:
+          type: ["string", "null"]
+        currency:
+          type: string
+        notes:
+          type: ["string", "null"]
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParsedQuoteLine"
+
+    ParsedQuoteLine:
+      type: object
+      required: [productName, unitPrice]
+      properties:
+        productName:
+          type: string
+        unitPrice:
+          type: string
+        currency:
+          type: string
+        leadTimeDays:
+          type: ["integer", "null"]
+        moq:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    SuggestedSuppliersResponse:
+      type: object
+      required: [suppliers]
+      properties:
+        suppliers:
+          type: array
+          items:
+            $ref: "#/components/schemas/SuggestedSupplier"
+
+    SuggestedSupplier:
+      type: object
+      required: [id, name, company, email, matchedCategories]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        company:
+          type: string
+        email:
+          type: string
+        currency:
+          type: string
+        typicalLeadTimeDays:
+          type: ["integer", "null"]
+        typicalResponseTimeHours:
+          type: ["integer", "null"]
+        matchedCategories:
+          type: array
+          items:
+            type: string
+        isPreferredForAny:
+          type: boolean
+
+    CustomerQuoteRecord:
+      type: object
+      required: [id, rfqId, markupPercent, landedCostBufferPercent, currency, validityDays, versionNumber, wasRevised, revisionCount, createdAt]
+      properties:
+        id:
+          type: integer
+        rfqId:
+          type: integer
+        markupPercent:
+          type: string
+        landedCostBufferPercent:
+          type: string
+        markupApplied:
+          type: ["string", "null"]
+        totalValue:
+          type: ["string", "null"]
+        currency:
+          type: string
+        validityDays:
+          type: integer
+        draft:
+          type: ["string", "null"]
+        versionNumber:
+          type: integer
+        parentQuoteId:
+          type: ["integer", "null"]
+        revisionReason:
+          type: ["string", "null"]
+        changesSummary:
+          type: ["string", "null"]
+        wasRevised:
+          type: boolean
+        revisionCount:
+          type: integer
+        sentAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    CustomerQuotesResponse:
+      type: object
+      required: [quotes]
+      properties:
+        quotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerQuoteRecord"
+
+    QuoteRevisionInput:
+      type: object
+      required: [revisionReason]
+      properties:
+        revisionReason:
+          type: string
+        markupPercent:
+          type: number
+        landedCostBufferPercent:
+          type: number
+        changesSummary:
+          type: string
+
+    CustomerQuoteRevisionResponse:
+      type: object
+      required: [quote]
+      properties:
+        quote:
+          $ref: "#/components/schemas/CustomerQuoteRecord"
+
+    SupplierCategoryRecord:
+      type: object
+      required: [id, supplierId, category, isPreferred]
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: integer
+        category:
+          type: string
+        isPreferred:
+          type: boolean
+        notes:
+          type: ["string", "null"]
+
+    SupplierRecord:
+      type: object
+      required: [id, name, company, email, country, currency, isActive, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        company:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        country:
+          type: string
+        currency:
+          type: string
+        typicalLeadTimeDays:
+          type: ["integer", "null"]
+        typicalResponseTimeHours:
+          type: ["integer", "null"]
+        paymentTerms:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    SupplierWithCategories:
+      allOf:
+        - $ref: "#/components/schemas/SupplierRecord"
+        - type: object
+          required: [categories]
+          properties:
+            categories:
+              type: array
+              items:
+                $ref: "#/components/schemas/SupplierCategoryRecord"
+
+    SuppliersResponse:
+      type: object
+      required: [suppliers]
+      properties:
+        suppliers:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierWithCategories"
+
+    SupplierDetailResponse:
+      type: object
+      required: [supplier]
+      properties:
+        supplier:
+          $ref: "#/components/schemas/SupplierWithCategories"
+
+    SupplierInput:
+      type: object
+      required: [name, company, email]
+      properties:
+        name:
+          type: string
+        company:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        country:
+          type: string
+        currency:
+          type: string
+        typicalLeadTimeDays:
+          type: integer
+        typicalResponseTimeHours:
+          type: integer
+        paymentTerms:
+          type: string
+        notes:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierCategoryInput"
+
+    SupplierUpdateInput:
+      type: object
+      properties:
+        name:
+          type: string
+        company:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        country:
+          type: string
+        currency:
+          type: string
+        typicalLeadTimeDays:
+          type: integer
+        typicalResponseTimeHours:
+          type: integer
+        paymentTerms:
+          type: string
+        notes:
+          type: string
+        isActive:
+          type: boolean
+
+    SupplierCategoryInput:
+      type: object
+      required: [category]
+      properties:
+        category:
+          type: string
+        isPreferred:
+          type: boolean
+        notes:
+          type: string
+
+    SupplierCategoryResponse:
+      type: object
+      required: [category]
+      properties:
+        category:
+          $ref: "#/components/schemas/SupplierCategoryRecord"
+
+    SupplierPerformanceMetrics:
+      type: object
+      required: [totalRfqs, totalContacted, totalResponded, totalSelected, responseRatePercent, selectionRatePercent]
+      properties:
+        totalRfqs:
+          type: integer
+        totalContacted:
+          type: integer
+        totalResponded:
+          type: integer
+        totalSelected:
+          type: integer
+        responseRatePercent:
+          type: integer
+        selectionRatePercent:
+          type: integer
+        avgResponseTimeHours:
+          type: ["number", "null"]
+
+    SupplierPerformanceResponse:
+      type: object
+      required: [performance, history]
+      properties:
+        performance:
+          $ref: "#/components/schemas/SupplierPerformanceMetrics"
+        history:
+          type: array
+          items:
+            type: object
+
+    SupplierPriceCell:
+      type: object
+      required: [supplier]
+      properties:
+        supplier:
+          type: string
+        unitPrice:
+          type: ["string", "null"]
+        landedUnitPrice:
+          type: ["string", "null"]
+        sellingUnitPrice:
+          type: ["string", "null"]
+        currency:
+          type: string
+        leadTimeDays:
+          type: ["integer", "null"]
+        moq:
+          type: ["string", "null"]
+
+    ComparisonRow:
+      type: object
+      required: [product, supplierPrices]
+      properties:
+        product:
+          type: string
+        catalogueNumber:
+          type: ["string", "null"]
+        supplierPrices:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierPriceCell"
+
+    ComparisonResponse:
+      type: object
+      properties:
+        comparison:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComparisonRow"
+        recommendation:
+          type: ["string", "null"]
+        quotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierQuote"
+        model:
+          type: string
+        landedCostBufferPercent:
+          type: number
