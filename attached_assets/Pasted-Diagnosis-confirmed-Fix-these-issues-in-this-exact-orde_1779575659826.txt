@@ -1,0 +1,183 @@
+Diagnosis confirmed. Fix these issues in this exact order:
+
+---
+
+BUG 1 — WRONG MODEL NAME (root cause of all General classifications)
+
+The model "claude-3-5-sonnet-20241022" is returning 404.
+
+Fix the model name in aiClient.ts.
+
+Use this model instead:
+"claude-3-5-sonnet-20241022" → replace with "claude-3-5-sonnet-20241022"
+
+Wait — first check the Anthropic API for the correct
+available model name. The correct model IDs as of 2025 are:
+
+- claude-3-5-sonnet-20241022  (Claude 3.5 Sonnet, Oct 2024)
+- claude-3-5-haiku-20241022   (Claude 3.5 Haiku, faster/cheaper)
+- claude-3-opus-20240229      (Claude 3 Opus)
+
+Test the API key with a minimal call first:
+POST https://api.anthropic.com/v1/messages
+Headers:
+  x-api-key: {ANTHROPIC_API_KEY}
+  anthropic-version: 2023-06-01
+  content-type: application/json
+Body:
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 10,
+  "messages": [{"role": "user", "content": "hi"}]
+}
+
+If that returns 404, try:
+  "claude-3-5-haiku-20241022"
+then:
+  "claude-3-opus-20240229"
+
+Use whichever model ID responds with 200.
+Update aiClient.ts to use the working model ID.
+
+Also fix the error handling:
+- Never silently return { classification: "General" } on error
+- Instead, store classification as "UNCLASSIFIED" in the DB
+- Show a red "Classification Failed" badge in the inbox
+- Log the full error including model name, status code,
+  and response body to the sync log
+- This makes failures visible instead of silent
+
+---
+
+BUG 2 — FULL EMAIL BODY NOT BEING FETCHED
+
+Currently only Zoho's 200-char summary snippet is passed
+to Claude. This is not enough for accurate classification.
+
+Fix the email sync to fetch the full message body:
+
+In sync.ts, after fetching the thread list from Zoho Mail,
+add a second API call to fetch the full message content
+for each thread before classification.
+
+Zoho Mail API endpoint for message content:
+GET https://mail.zoho.com/api/accounts/{accountId}/messages/{messageId}
+Header: Authorization: Zoho-oauthtoken {access_token}
+
+From the response, extract:
+- content (full email body text, strip HTML tags)
+- attachments array (filename, size, type)
+
+Truncate body to first 2000 characters before passing
+to Claude (enough for classification, not wasteful).
+
+Pass this to the triage prompt:
+- sender name
+- sender email
+- sender domain (extract from email address)
+- subject
+- body (first 2000 chars, HTML stripped)
+- attachment filenames (comma separated or "none")
+
+---
+
+BUG 3 — REDUCE max_tokens FOR CLASSIFICATION
+
+Classification only returns a small JSON object.
+Change max_tokens from 800 to 150 for the triage call.
+
+---
+
+BUG 4 — UPDATE TRIAGE PROMPT
+
+Replace current triage prompt with this:
+
+SYSTEM:
+You are an email classifier for Lumina Supplies, a B2B
+laboratory and scientific supplies company in Riyadh,
+Saudi Arabia.
+
+Classify into ONE of:
+RFQ, SUPPLIER_REPLY, CUSTOMER_FOLLOWUP,
+PO_INVOICE, INTERNAL, SPAM_NEWSLETTER, GENERAL
+
+RFQ signals — classify as RFQ if ANY present:
+- Subject or body contains: RFQ, quotation, quote, pricing,
+  inquiry, enquiry, "please quote", "kindly provide",
+  "we need", "price for", "request for quotation"
+- Any catalogue numbers, part numbers, CAS numbers
+- Sender from hospital, clinic, lab, university, or
+  research institution domain
+- Product names + quantities mentioned together
+- Arabic pricing requests
+
+SUPPLIER_REPLY signals:
+- Sender is manufacturer or distributor
+- Contains unit prices, lead times, MOQ
+- "our best price", "please find attached our quotation"
+- Price tables or product availability info
+
+CRITICAL RULES:
+- If unsure between RFQ and GENERAL and sender is a
+  business — classify as RFQ
+- Arabic emails: classify same as English, never default
+  to GENERAL for Arabic content
+- Emails with catalogue or part numbers = RFQ or
+  SUPPLIER_REPLY, never GENERAL
+- Silent catch blocks must NOT default to GENERAL
+
+Return ONLY valid JSON, no explanation outside JSON:
+{
+  "classification": "RFQ|SUPPLIER_REPLY|CUSTOMER_FOLLOWUP|PO_INVOICE|INTERNAL|SPAM_NEWSLETTER|GENERAL",
+  "confidence": "high|medium|low",
+  "reasoning": "one sentence max"
+}
+
+USER:
+From: {sender_name} <{sender_email}>
+Domain: {sender_domain}
+Subject: {subject}
+Attachments: {attachment_names}
+Body:
+{body_2000_chars}
+
+---
+
+BUG 5 — ADD RE-CLASSIFY ALL BUTTON
+
+In the Inbox page header, add a "Re-classify All" button.
+When clicked:
+- Re-fetches full body for each stored thread
+- Re-runs classification with the new prompt
+- Updates classification in DB
+- Shows progress: "Re-classifying X of Y..."
+- When done: shows breakdown summary:
+  "X RFQ, X Supplier Reply, X General, X Failed"
+
+---
+
+BUG 6 — FIX BADGE DISPLAY
+
+After classification, each inbox row must show a
+colored badge:
+- RFQ = cyan
+- SUPPLIER_REPLY = amber
+- CUSTOMER_FOLLOWUP = violet
+- PO_INVOICE = green
+- INTERNAL = blue
+- SPAM_NEWSLETTER = gray
+- GENERAL = dark gray
+- UNCLASSIFIED = red (error state)
+- Low confidence = badge with ⚠ prefix
+
+---
+
+IMPLEMENTATION ORDER:
+1. Fix model name in aiClient.ts (test API key first)
+2. Fix silent error handling (UNCLASSIFIED not General)
+3. Fix email body fetching in sync.ts
+4. Update triage prompt and reduce max_tokens to 150
+5. Add Re-classify All button
+6. Fix badge colors
+7. Run Re-classify All on existing threads
+8. Show me the classification breakdown result
