@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const emailThreadsTable = pgTable("email_threads", {
   id: serial("id").primaryKey(),
   threadId: text("thread_id").notNull().unique(),
+  accountId: text("account_id"),    // Zoho accountId — links thread to a connection
   subject: text("subject").notNull(),
   senderName: text("sender_name").notNull(),
   senderEmail: text("sender_email").notNull(),

@@ -1,13 +1,18 @@
-import { useState } from "react";
-import { useGetThreads, useCreateRfq } from "@workspace/api-client-react";
+import { useState, useMemo } from "react";
+import {
+  useGetThreads,
+  useCreateRfq,
+  useGetZohoAccounts,
+  useGetThreadCounts,
+  useRunSyncForAccount,
+  useRunSync,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Search, ExternalLink, ArrowRight, RefreshCw, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
-import { useMutation } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 
 // ─── Classification config ─────────────────────────────────────────────────────
 
@@ -45,6 +50,19 @@ const COLORS: Record<string, string> = {
   UNCLASSIFIED: "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
+const ROLE_COLORS: Record<string, string> = {
+  Owner: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
+  Sales: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  Procurement: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  Support: "bg-violet-500/20 text-violet-300 border-violet-500/40",
+  Finance: "bg-blue-500/20 text-blue-300 border-blue-500/40",
+  General: "bg-zinc-600/30 text-zinc-300 border-zinc-500/40",
+};
+
+const ROLE_ORDER = ["Owner", "Sales", "Procurement", "Support", "Finance", "General"];
+
+// ─── Badges ────────────────────────────────────────────────────────────────────
+
 function ClassificationBadge({
   classification,
   confidence,
@@ -58,7 +76,6 @@ function ClassificationBadge({
   const label = CLASSIFICATION_LABELS[classification] ?? classification;
   const color = COLORS[classification] ?? COLORS["GENERAL"]!;
   const isLow = confidence === "low";
-
   return (
     <span
       title={reasoning ?? undefined}
@@ -70,44 +87,94 @@ function ClassificationBadge({
   );
 }
 
-// ─── Reclassify mutation ───────────────────────────────────────────────────────
-
-interface ReclassifyResult {
-  ok: boolean;
-  total: number;
-  processed: number;
-  failed: number;
-  counts: Record<string, number>;
+function RoleBadge({ label }: { label: string }) {
+  const color = ROLE_COLORS[label] ?? ROLE_COLORS["General"]!;
+  return (
+    <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border font-medium ${color}`}>
+      {label}
+    </span>
+  );
 }
 
+// ─── Reclassify ─────────────────────────────────────────────────────────────────
+
 function useReclassifyAll() {
-  return useMutation<ReclassifyResult, Error>({
+  return useMutation<{ ok: boolean; processed: number; failed: number; counts: Record<string, number> }, Error>({
     mutationFn: async () => {
       const res = await fetch("/api/ai/reclassify-all", { method: "POST" });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text);
-      }
-      return res.json() as Promise<ReclassifyResult>;
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
     },
   });
 }
 
+// ─── Per-tab state ─────────────────────────────────────────────────────────────
+
+interface TabState {
+  classification: string;
+  search: string;
+}
+
+const DEFAULT_TAB_STATE: TabState = { classification: "All", search: "" };
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-export default function Inbox() {
-  const [filter, setFilter] = useState<string>("All");
-  const [search, setSearch] = useState("");
-  const queryClient = useQueryClient();
+interface ZohoAccount {
+  id: number;
+  accountId: string;
+  email: string;
+  accountLabel: string;
+  lastSyncedAt?: string | null;
+}
 
-  const queryParams = {
-    ...(filter !== "All" ? { classification: filter } : {}),
-    ...(search ? { search } : {}),
+export default function Inbox() {
+  const queryClient = useQueryClient();
+  const { data: accountsData } = useGetZohoAccounts();
+  const { data: countsData } = useGetThreadCounts();
+
+  const accounts: ZohoAccount[] = useMemo(() => {
+    const list = (accountsData?.accounts ?? []) as ZohoAccount[];
+    return [...list].sort((a, b) => {
+      const ai = ROLE_ORDER.indexOf(a.accountLabel);
+      const bi = ROLE_ORDER.indexOf(b.accountLabel);
+      const aRank = ai === -1 ? ROLE_ORDER.length : ai;
+      const bRank = bi === -1 ? ROLE_ORDER.length : bi;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.email.localeCompare(b.email);
+    });
+  }, [accountsData]);
+
+  // Active tab key: "All" or a Zoho accountId
+  const [activeTab, setActiveTab] = useState<string>("All");
+  const [tabStates, setTabStates] = useState<Record<string, TabState>>({});
+
+  const currentState = tabStates[activeTab] ?? DEFAULT_TAB_STATE;
+  const setCurrentState = (patch: Partial<TabState>) => {
+    setTabStates((prev) => ({
+      ...prev,
+      [activeTab]: { ...(prev[activeTab] ?? DEFAULT_TAB_STATE), ...patch },
+    }));
   };
+
+  const queryParams: Record<string, string> = {};
+  if (currentState.classification !== "All") queryParams["classification"] = currentState.classification;
+  if (currentState.search) queryParams["search"] = currentState.search;
+  if (activeTab !== "All") queryParams["accountId"] = activeTab;
 
   const { data, isLoading } = useGetThreads(queryParams);
   const createRfq = useCreateRfq();
   const reclassify = useReclassifyAll();
+  const syncAll = useRunSync();
+  const syncOne = useRunSyncForAccount();
+
+  const activeAccount = activeTab === "All" ? null : accounts.find((a) => a.accountId === activeTab) ?? null;
+
+  const invalidateAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/threads/counts"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/sync/status"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/auth/zoho/accounts"] });
+  };
 
   const handleMoveToPipeline = (thread: { id: number; senderName: string; senderEmail: string; subject: string }) => {
     createRfq.mutate(
@@ -122,10 +189,36 @@ export default function Inbox() {
       {
         onSuccess: () => {
           toast.success("Added to Pipeline");
-          void queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+          invalidateAll();
           void queryClient.invalidateQueries({ queryKey: ["/api/rfq"] });
         },
         onError: () => toast.error("Failed to add to pipeline"),
+      },
+    );
+  };
+
+  const handleSyncAll = () => {
+    syncAll.mutate(undefined, {
+      onSuccess: (res) => {
+        const r = res as { synced?: number; rfqsCreated?: number };
+        toast.success(`Sync complete — ${r.synced ?? 0} new, ${r.rfqsCreated ?? 0} RFQs`);
+        invalidateAll();
+      },
+      onError: () => toast.error("Sync failed"),
+    });
+  };
+
+  const handleSyncCurrent = () => {
+    if (!activeAccount) return;
+    syncOne.mutate(
+      { id: activeAccount.id },
+      {
+        onSuccess: (res) => {
+          const r = res as { synced?: number; rfqsCreated?: number };
+          toast.success(`${activeAccount.accountLabel} synced — ${r.synced ?? 0} new, ${r.rfqsCreated ?? 0} RFQs`);
+          invalidateAll();
+        },
+        onError: () => toast.error("Sync failed"),
       },
     );
   };
@@ -134,61 +227,120 @@ export default function Inbox() {
     reclassify.mutate(undefined, {
       onSuccess: (result) => {
         toast.success(
-          `Re-classified ${result.processed} emails — ${result.counts["RFQ"] ?? 0} RFQ, ${result.counts["SUPPLIER_REPLY"] ?? 0} Supplier Reply`,
+          `Re-classified ${result.processed} — ${result.counts["RFQ"] ?? 0} RFQ, ${result.counts["SUPPLIER_REPLY"] ?? 0} Supplier`,
         );
-        void queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+        invalidateAll();
       },
       onError: (err) => toast.error(`Re-classification failed: ${err.message}`),
     });
   };
 
+  const counts = countsData?.counts ?? {};
+  const totalCount = countsData?.total ?? 0;
+  const isSyncing = syncAll.isPending || syncOne.isPending;
+
   return (
-    <div className="space-y-4 max-w-5xl mx-auto">
+    <div className="space-y-4 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
         <h1 className="text-2xl font-bold tracking-tight">Inbox</h1>
-        <div className="flex gap-2 items-center w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search emails..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReclassifyAll}
-            disabled={reclassify.isPending}
-            className="shrink-0"
-          >
+        <div className="flex gap-2 items-center">
+          <Button variant="outline" size="sm" onClick={handleReclassifyAll} disabled={reclassify.isPending}>
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${reclassify.isPending ? "animate-spin" : ""}`} />
             {reclassify.isPending ? "Re-classifying…" : "Re-classify All"}
+          </Button>
+          <Button size="sm" onClick={handleSyncAll} disabled={isSyncing}>
+            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncAll.isPending ? "animate-spin" : ""}`} />
+            Sync All
           </Button>
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-1.5">
-        {CLASSIFICATIONS.map((c) => {
-          const label = c === "All" ? "All" : (CLASSIFICATION_LABELS[c] ?? c);
-          const isActive = filter === c;
+      {/* Account tabs */}
+      <div className="flex flex-wrap gap-1.5 border-b border-border pb-2">
+        <button
+          onClick={() => setActiveTab("All")}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition-colors ${
+            activeTab === "All"
+              ? "bg-foreground text-background border-foreground"
+              : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
+          }`}
+        >
+          <span className="font-medium">All</span>
+          <span className="opacity-70">({totalCount})</span>
+        </button>
+        {accounts.map((acc) => {
+          const isActive = activeTab === acc.accountId;
+          const count = counts[acc.accountId] ?? 0;
           return (
             <button
-              key={c}
-              onClick={() => setFilter(c)}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+              key={acc.id}
+              onClick={() => setActiveTab(acc.accountId)}
+              className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-md border transition-colors ${
                 isActive
                   ? "bg-foreground text-background border-foreground"
                   : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
               }`}
             >
-              {label}
+              <RoleBadge label={acc.accountLabel} />
+              <span className="font-medium">{acc.email}</span>
+              <span className={isActive ? "opacity-80" : "opacity-70"}>({count})</span>
             </button>
           );
         })}
+      </div>
+
+      {/* Per-account header strip */}
+      {activeAccount && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground px-1">
+          <div className="flex items-center gap-2">
+            <RoleBadge label={activeAccount.accountLabel} />
+            <span className="text-foreground font-medium">{activeAccount.email}</span>
+            <span>·</span>
+            <span>
+              Last sync:{" "}
+              {activeAccount.lastSyncedAt
+                ? formatDistanceToNow(new Date(activeAccount.lastSyncedAt), { addSuffix: true })
+                : "never"}
+            </span>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleSyncCurrent} disabled={isSyncing}>
+            <RefreshCw className={`h-3 w-3 mr-1 ${syncOne.isPending ? "animate-spin" : ""}`} />
+            Sync this account
+          </Button>
+        </div>
+      )}
+
+      {/* Search + classification filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search this account…"
+            className="pl-9"
+            value={currentState.search}
+            onChange={(e) => setCurrentState({ search: e.target.value })}
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5 flex-1">
+          {CLASSIFICATIONS.map((c) => {
+            const label = c === "All" ? "All" : (CLASSIFICATION_LABELS[c] ?? c);
+            const isActive = currentState.classification === c;
+            return (
+              <button
+                key={c}
+                onClick={() => setCurrentState({ classification: c })}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  isActive
+                    ? "bg-foreground text-background border-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Thread list */}
@@ -196,17 +348,7 @@ export default function Inbox() {
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground text-sm">Loading threads…</div>
         ) : !data?.threads || data.threads.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">
-            No emails found
-            {filter !== "All" && (
-              <span>
-                {" "}
-                with classification{" "}
-                <span className="text-foreground">{CLASSIFICATION_LABELS[filter] ?? filter}</span>
-              </span>
-            )}
-            .
-          </div>
+          <div className="p-8 text-center text-muted-foreground text-sm">No emails match the current filters.</div>
         ) : (
           data.threads.map((thread) => (
             <div
@@ -241,11 +383,7 @@ export default function Inbox() {
                     </a>
                   </Button>
                   {!thread.isRfq && thread.classification === "RFQ" && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleMoveToPipeline(thread)}
-                      disabled={createRfq.isPending}
-                    >
+                    <Button size="sm" onClick={() => handleMoveToPipeline(thread)} disabled={createRfq.isPending}>
                       <ArrowRight className="h-3 w-3 mr-1" /> Pipeline
                     </Button>
                   )}
@@ -256,7 +394,7 @@ export default function Inbox() {
         )}
       </div>
 
-      {/* Re-classify result summary */}
+      {/* Re-classify summary */}
       {reclassify.data && (
         <div className="text-xs text-muted-foreground px-1">
           Last re-classification: {reclassify.data.processed} processed, {reclassify.data.failed} failed

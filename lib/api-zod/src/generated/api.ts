@@ -99,9 +99,31 @@ export const DisconnectZohoResponse = zod.object({
 
 
 /**
- * @summary Trigger Zoho inbox sync and AI triage
+ * @summary Trigger Zoho inbox sync and AI triage for ALL accounts
  */
 export const RunSyncResponse = zod.object({
+  "ok": zod.boolean(),
+  "synced": zod.number(),
+  "rfqsCreated": zod.number().optional(),
+  "accounts": zod.array(zod.object({
+  "label": zod.string().optional(),
+  "email": zod.string().optional(),
+  "synced": zod.number().optional(),
+  "rfqsCreated": zod.number().optional(),
+  "errors": zod.number().optional(),
+  "error": zod.string().optional()
+})).optional()
+})
+
+
+/**
+ * @summary Sync a single Zoho account by connection id
+ */
+export const RunSyncForAccountParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RunSyncForAccountResponse = zod.object({
   "ok": zod.boolean(),
   "synced": zod.number(),
   "rfqsCreated": zod.number().optional(),
@@ -132,7 +154,8 @@ export const GetSyncStatusResponse = zod.object({
  */
 export const GetThreadsQueryParams = zod.object({
   "classification": zod.coerce.string().optional(),
-  "search": zod.coerce.string().optional()
+  "search": zod.coerce.string().optional(),
+  "accountId": zod.coerce.string().optional().describe('Filter threads by Zoho accountId')
 })
 
 export const GetThreadsResponse = zod.object({
@@ -152,6 +175,15 @@ export const GetThreadsResponse = zod.object({
   "attachmentType": zod.string().nullish(),
   "syncedAt": zod.string()
 }))
+})
+
+
+/**
+ * @summary Get thread counts grouped by Zoho accountId
+ */
+export const GetThreadCountsResponse = zod.object({
+  "total": zod.number(),
+  "counts": zod.record(zod.string(), zod.number())
 })
 
 

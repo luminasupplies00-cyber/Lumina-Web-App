@@ -152,7 +152,26 @@ paths:
     post:
       operationId: runSync
       tags: [zoho]
-      summary: Trigger Zoho inbox sync and AI triage
+      summary: Trigger Zoho inbox sync and AI triage for ALL accounts
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+
+  /sync/run/{id}:
+    post:
+      operationId: runSyncForAccount
+      tags: [zoho]
+      summary: Sync a single Zoho account by connection id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
       responses:
         "200":
           description: Sync result
@@ -188,6 +207,11 @@ paths:
           name: search
           schema:
             type: string
+        - in: query
+          name: accountId
+          schema:
+            type: string
+          description: Filter threads by Zoho accountId
       responses:
         "200":
           description: Thread list
@@ -195,6 +219,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ThreadsResponse"
+
+  /threads/counts:
+    get:
+      operationId: getThreadCounts
+      tags: [threads]
+      summary: Get thread counts grouped by Zoho accountId
+      responses:
+        "200":
+          description: Thread counts per account
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [counts, total]
+                properties:
+                  total:
+                    type: integer
+                  counts:
+                    type: object
+                    additionalProperties:
+                      type: integer
 
   /threads/{id}:
     get:

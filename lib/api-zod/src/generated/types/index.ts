@@ -19,6 +19,8 @@ export * from './extractionConfirmResponse';
 export * from './extractionReviewProduct';
 export * from './followupDraftResponse';
 export * from './getSuppliersParams';
+export * from './getThreadCounts200';
+export * from './getThreadCounts200Counts';
 export * from './getThreadsParams';
 export * from './getZohoAccounts200';
 export * from './getZohoAuthUrlParams';

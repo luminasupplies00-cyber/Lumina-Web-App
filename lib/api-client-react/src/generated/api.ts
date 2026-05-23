@@ -29,6 +29,7 @@ import type {
   ExtractionConfirmResponse,
   FollowupDraftResponse,
   GetSuppliersParams,
+  GetThreadCounts200,
   GetThreadsParams,
   GetZohoAccounts200,
   GetZohoAuthUrlParams,
@@ -690,7 +691,7 @@ export const getRunSyncUrl = () => {
 }
 
 /**
- * @summary Trigger Zoho inbox sync and AI triage
+ * @summary Trigger Zoho inbox sync and AI triage for ALL accounts
  */
 export const runSync = async ( options?: RequestInit): Promise<SyncResult> => {
 
@@ -738,7 +739,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type RunSyncMutationError = ErrorType<unknown>
 
     /**
- * @summary Trigger Zoho inbox sync and AI triage
+ * @summary Trigger Zoho inbox sync and AI triage for ALL accounts
  */
 export const useRunSync = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runSync>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -749,6 +750,76 @@ export const useRunSync = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRunSyncMutationOptions(options));
+    }
+
+export const getRunSyncForAccountUrl = (id: number,) => {
+
+
+
+
+  return `/api/sync/run/${id}`
+}
+
+/**
+ * @summary Sync a single Zoho account by connection id
+ */
+export const runSyncForAccount = async (id: number, options?: RequestInit): Promise<SyncResult> => {
+
+  return customFetch<SyncResult>(getRunSyncForAccountUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRunSyncForAccountMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runSyncForAccount>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runSyncForAccount>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['runSyncForAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runSyncForAccount>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  runSyncForAccount(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunSyncForAccountMutationResult = NonNullable<Awaited<ReturnType<typeof runSyncForAccount>>>
+
+    export type RunSyncForAccountMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Sync a single Zoho account by connection id
+ */
+export const useRunSyncForAccount = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runSyncForAccount>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runSyncForAccount>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRunSyncForAccountMutationOptions(options));
     }
 
 export const getGetSyncStatusUrl = () => {
@@ -900,6 +971,83 @@ export function useGetThreads<TData = Awaited<ReturnType<typeof getThreads>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetThreadsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetThreadCountsUrl = () => {
+
+
+
+
+  return `/api/threads/counts`
+}
+
+/**
+ * @summary Get thread counts grouped by Zoho accountId
+ */
+export const getThreadCounts = async ( options?: RequestInit): Promise<GetThreadCounts200> => {
+
+  return customFetch<GetThreadCounts200>(getGetThreadCountsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetThreadCountsQueryKey = () => {
+    return [
+    `/api/threads/counts`
+    ] as const;
+    }
+
+
+export const getGetThreadCountsQueryOptions = <TData = Awaited<ReturnType<typeof getThreadCounts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getThreadCounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetThreadCountsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getThreadCounts>>> = ({ signal }) => getThreadCounts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getThreadCounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetThreadCountsQueryResult = NonNullable<Awaited<ReturnType<typeof getThreadCounts>>>
+export type GetThreadCountsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get thread counts grouped by Zoho accountId
+ */
+
+export function useGetThreadCounts<TData = Awaited<ReturnType<typeof getThreadCounts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getThreadCounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetThreadCountsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

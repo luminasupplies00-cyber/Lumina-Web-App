@@ -167,7 +167,7 @@ ${truncatedBody || "(no body)"}`;
 
 // ─── Sync a single account ────────────────────────────────────────────────────
 
-async function syncAccount(
+export async function syncAccount(
   conn: DecryptedZohoConnection,
   log: typeof logger,
 ): Promise<{ synced: number; rfqsCreated: number; errors: number }> {
@@ -254,6 +254,7 @@ async function syncAccount(
         .insert(emailThreadsTable)
         .values({
           threadId: threadKey,
+          accountId: conn.accountId,
           subject,
           senderName,
           senderEmail,
@@ -350,6 +351,29 @@ router.post("/sync/run", async (req, res) => {
     res.json({ ok: true, synced: totalSynced, rfqsCreated: totalRfqs, accounts: accountResults });
   } catch (err) {
     req.log.error({ err }, "Sync failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Sync a single Zoho account
+router.post("/sync/run/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] ?? "0");
+    const connections = await getAllZohoConnections();
+    const conn = connections.find((c) => c.id === id);
+    if (!conn) {
+      res.status(404).json({ error: "Zoho account not found or inactive" });
+      return;
+    }
+    const result = await syncAccount(conn, req.log);
+    res.json({
+      ok: true,
+      synced: result.synced,
+      rfqsCreated: result.rfqsCreated,
+      accounts: [{ label: conn.accountLabel, email: conn.email, ...result }],
+    });
+  } catch (err) {
+    req.log.error({ err }, "Per-account sync failed");
     res.status(500).json({ error: String(err) });
   }
 });

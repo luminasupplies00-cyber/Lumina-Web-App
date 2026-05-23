@@ -581,6 +581,17 @@ export type GetZohoAccounts200 = {
 export type GetThreadsParams = {
 classification?: string;
 search?: string;
+/**
+ * Filter threads by Zoho accountId
+ */
+accountId?: string;
+};
+
+export type GetThreadCounts200Counts = {[key: string]: number};
+
+export type GetThreadCounts200 = {
+  total: number;
+  counts: GetThreadCounts200Counts;
 };
 
 export type ReclassifyAll200Counts = {[key: string]: number};

@@ -9,4 +9,8 @@
 export type GetThreadsParams = {
 classification?: string;
 search?: string;
+/**
+ * Filter threads by Zoho accountId
+ */
+accountId?: string;
 };

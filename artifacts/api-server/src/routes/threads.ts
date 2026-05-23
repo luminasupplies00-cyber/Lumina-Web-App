@@ -1,35 +1,67 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { emailThreadsTable } from "@workspace/db";
-import { eq, desc, ilike, or } from "drizzle-orm";
+import { and, eq, desc, ilike, or, sql, type SQL } from "drizzle-orm";
 
 const router = Router();
 
 router.get("/threads", async (req, res) => {
   try {
-    const { classification, search } = req.query as Record<string, string>;
+    const { classification, search, accountId } = req.query as Record<string, string>;
 
-    let query = db.select().from(emailThreadsTable).$dynamic();
-
-    if (classification && classification !== "all") {
-      query = query.where(eq(emailThreadsTable.classification, classification));
+    const conditions: SQL[] = [];
+    if (classification && classification !== "all" && classification !== "All") {
+      conditions.push(eq(emailThreadsTable.classification, classification));
     }
-
+    if (accountId && accountId !== "all" && accountId !== "All") {
+      conditions.push(eq(emailThreadsTable.accountId, accountId));
+    }
     if (search) {
-      query = query.where(
-        or(
-          ilike(emailThreadsTable.senderName, `%${search}%`),
-          ilike(emailThreadsTable.senderEmail, `%${search}%`),
-          ilike(emailThreadsTable.subject, `%${search}%`),
-        ),
+      const like = `%${search}%`;
+      const matched = or(
+        ilike(emailThreadsTable.senderName, like),
+        ilike(emailThreadsTable.senderEmail, like),
+        ilike(emailThreadsTable.subject, like),
       );
+      if (matched) conditions.push(matched);
     }
 
-    const threads = await query.orderBy(desc(emailThreadsTable.receivedAt));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const threads = await db
+      .select()
+      .from(emailThreadsTable)
+      .where(where)
+      .orderBy(desc(emailThreadsTable.receivedAt));
+
     res.json({ threads });
   } catch (err) {
     req.log.error({ err }, "Failed to get threads");
     res.status(500).json({ error: "Failed to retrieve email threads" });
+  }
+});
+
+// Per-account counts — used by the inbox tabs
+router.get("/threads/counts", async (req, res) => {
+  try {
+    const rows = await db
+      .select({
+        accountId: emailThreadsTable.accountId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(emailThreadsTable)
+      .groupBy(emailThreadsTable.accountId);
+
+    const counts: Record<string, number> = {};
+    let total = 0;
+    for (const row of rows) {
+      total += row.count;
+      if (row.accountId) counts[row.accountId] = row.count;
+    }
+    res.json({ counts, total });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get thread counts");
+    res.status(500).json({ error: "Failed to retrieve thread counts" });
   }
 });
 
