@@ -390,9 +390,12 @@ export async function trashMessage(
   conn: DecryptedZohoConnection,
   messageId: string,
 ): Promise<void> {
+  const { trashId } = await getFolderIds(conn);
+  if (!trashId) throw new Error("No Trash folder found in Zoho account");
   await zohoPutForConnection(conn, `/accounts/${conn.accountId}/updatemessage`, {
-    mode: "moveToTrash",
+    mode: "moveMessage",
     messageId: [messageId],
+    destfolderId: trashId,
   });
 }
 
