@@ -20,8 +20,10 @@ async function getSetting(key: string): Promise<string | null> {
   }
 }
 
+// GET /auth/zoho/connect?label=Sales
 router.get("/auth/zoho/connect", async (req, res) => {
   try {
+    const label = (req.query["label"] as string) || "General";
     const clientId = await getSetting("ZOHO_CLIENT_ID");
     const redirectUri = await getSetting("ZOHO_REDIRECT_URI");
     const accountsDomain = (await getSetting("ZOHO_ACCOUNTS_DOMAIN")) ?? "accounts.zoho.com";
@@ -33,12 +35,16 @@ router.get("/auth/zoho/connect", async (req, res) => {
       return;
     }
 
+    // Encode label in state so callback knows which label to use
+    const state = Buffer.from(JSON.stringify({ label })).toString("base64url");
+
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
       scope: "ZohoMail.messages.READ,ZohoMail.accounts.READ",
       redirect_uri: redirectUri,
       access_type: "offline",
+      state,
     });
 
     const authUrl = `https://${accountsDomain}/oauth/v2/auth?${params.toString()}`;
@@ -49,8 +55,9 @@ router.get("/auth/zoho/connect", async (req, res) => {
   }
 });
 
+// GET /auth/zoho/callback
 router.get("/auth/zoho/callback", async (req, res) => {
-  const { code, error: oauthError } = req.query as Record<string, string>;
+  const { code, error: oauthError, state } = req.query as Record<string, string>;
 
   if (oauthError) {
     res.status(400).json({ error: `Zoho OAuth error: ${oauthError}` });
@@ -59,6 +66,17 @@ router.get("/auth/zoho/callback", async (req, res) => {
   if (!code) {
     res.status(400).json({ error: "No authorization code received" });
     return;
+  }
+
+  // Decode label from state
+  let accountLabel = "General";
+  if (state) {
+    try {
+      const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"));
+      accountLabel = decoded.label || "General";
+    } catch {
+      // Ignore decode errors — use default label
+    }
   }
 
   try {
@@ -109,6 +127,7 @@ router.get("/auth/zoho/callback", async (req, res) => {
 
     const tokenExpiry = new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000);
 
+    // Fetch account info to get accountId and email
     const accountRes = await fetch("https://mail.zoho.com/api/accounts", {
       headers: {
         Authorization: `Zoho-oauthtoken ${tokenData.access_token}`,
@@ -116,12 +135,16 @@ router.get("/auth/zoho/callback", async (req, res) => {
       },
     });
 
-    let accountId = "unknown";
+    let accountId = `unknown_${Date.now()}`;
     let email = "unknown";
 
     if (accountRes.ok) {
       const accountData = (await accountRes.json()) as {
-        data?: Array<{ accountId: string; primaryEmailAddress?: string; emailAddress?: Array<{ mailId: string }> }>;
+        data?: Array<{
+          accountId: string;
+          primaryEmailAddress?: string;
+          emailAddress?: Array<{ mailId: string }>;
+        }>;
       };
       const account = accountData.data?.[0];
       if (account) {
@@ -130,18 +153,40 @@ router.get("/auth/zoho/callback", async (req, res) => {
       }
     }
 
-    await db.delete(zohoConnectionsTable);
+    // Upsert: if same accountId exists, update it; otherwise insert
+    const existing = await db
+      .select({ id: zohoConnectionsTable.id })
+      .from(zohoConnectionsTable)
+      .where(eq(zohoConnectionsTable.accountId, accountId))
+      .limit(1);
 
-    await db.insert(zohoConnectionsTable).values({
-      accountId,
-      email,
-      accessToken: encrypt(tokenData.access_token),
-      refreshToken: encrypt(tokenData.refresh_token),
-      tokenExpiry,
-      accountsDomain,
-    });
+    if (existing[0]) {
+      await db
+        .update(zohoConnectionsTable)
+        .set({
+          email,
+          accountLabel,
+          accessToken: encrypt(tokenData.access_token),
+          refreshToken: encrypt(tokenData.refresh_token),
+          tokenExpiry,
+          accountsDomain,
+          isActive: true,
+        })
+        .where(eq(zohoConnectionsTable.accountId, accountId));
+    } else {
+      await db.insert(zohoConnectionsTable).values({
+        accountId,
+        email,
+        accountLabel,
+        accessToken: encrypt(tokenData.access_token),
+        refreshToken: encrypt(tokenData.refresh_token),
+        tokenExpiry,
+        accountsDomain,
+        isActive: true,
+      });
+    }
 
-    req.log.info({ accountId, email }, "Zoho connected successfully");
+    req.log.info({ accountId, email, accountLabel }, "Zoho account connected");
 
     const domains = process.env["REPLIT_DOMAINS"]?.split(",")[0];
     const redirectTarget = domains ? `https://${domains}/settings` : "/settings";
@@ -152,16 +197,47 @@ router.get("/auth/zoho/callback", async (req, res) => {
   }
 });
 
-router.delete("/auth/zoho/disconnect", async (req, res) => {
+// GET /auth/zoho/accounts — list all connected accounts
+router.get("/auth/zoho/accounts", async (req, res) => {
   try {
-    await db.delete(zohoConnectionsTable);
+    const rows = await db
+      .select({
+        id: zohoConnectionsTable.id,
+        accountId: zohoConnectionsTable.accountId,
+        email: zohoConnectionsTable.email,
+        accountLabel: zohoConnectionsTable.accountLabel,
+        connectedAt: zohoConnectionsTable.connectedAt,
+        lastSyncedAt: zohoConnectionsTable.lastSyncedAt,
+        tokenExpiry: zohoConnectionsTable.tokenExpiry,
+        isActive: zohoConnectionsTable.isActive,
+      })
+      .from(zohoConnectionsTable)
+      .where(eq(zohoConnectionsTable.isActive, true))
+      .orderBy(zohoConnectionsTable.connectedAt);
+
+    res.json({ accounts: rows });
+  } catch (err) {
+    req.log.error({ err }, "Failed to list Zoho accounts");
+    res.status(500).json({ error: "Failed to list accounts" });
+  }
+});
+
+// DELETE /auth/zoho/accounts/:id — disconnect a specific account
+router.delete("/auth/zoho/accounts/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] ?? "0");
+    await db
+      .update(zohoConnectionsTable)
+      .set({ isActive: false })
+      .where(eq(zohoConnectionsTable.id, id));
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Failed to disconnect Zoho");
+    req.log.error({ err }, "Failed to disconnect Zoho account");
     res.status(500).json({ error: "Failed to disconnect" });
   }
 });
 
+// GET /auth/zoho/status — single-account compat (first active connection)
 router.get("/auth/zoho/status", async (req, res) => {
   try {
     const rows = await db
@@ -169,30 +245,45 @@ router.get("/auth/zoho/status", async (req, res) => {
         id: zohoConnectionsTable.id,
         email: zohoConnectionsTable.email,
         accountId: zohoConnectionsTable.accountId,
+        accountLabel: zohoConnectionsTable.accountLabel,
         connectedAt: zohoConnectionsTable.connectedAt,
         lastSyncedAt: zohoConnectionsTable.lastSyncedAt,
         tokenExpiry: zohoConnectionsTable.tokenExpiry,
       })
       .from(zohoConnectionsTable)
-      .limit(1);
+      .where(eq(zohoConnectionsTable.isActive, true))
+      .orderBy(zohoConnectionsTable.connectedAt);
 
     if (rows.length === 0) {
       res.json({ connected: false });
       return;
     }
 
-    const conn = rows[0]!;
+    const primary = rows[0]!;
     res.json({
       connected: true,
-      email: conn.email,
-      accountId: conn.accountId,
-      connectedAt: conn.connectedAt,
-      lastSyncedAt: conn.lastSyncedAt,
-      tokenExpiry: conn.tokenExpiry,
+      email: primary.email,
+      accountId: primary.accountId,
+      accountLabel: primary.accountLabel,
+      connectedAt: primary.connectedAt,
+      lastSyncedAt: primary.lastSyncedAt,
+      tokenExpiry: primary.tokenExpiry,
+      totalAccounts: rows.length,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get Zoho status");
     res.status(500).json({ error: "Failed to get connection status" });
+  }
+});
+
+// DELETE /auth/zoho/disconnect — disconnect all (kept for backward compat)
+router.delete("/auth/zoho/disconnect", async (req, res) => {
+  try {
+    await db.update(zohoConnectionsTable).set({ isActive: false });
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to disconnect Zoho");
+    res.status(500).json({ error: "Failed to disconnect" });
   }
 });
 

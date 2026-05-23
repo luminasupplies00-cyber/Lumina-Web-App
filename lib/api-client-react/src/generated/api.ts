@@ -30,6 +30,8 @@ import type {
   FollowupDraftResponse,
   GetSuppliersParams,
   GetThreadsParams,
+  GetZohoAccounts200,
+  GetZohoAuthUrlParams,
   HealthStatus,
   OkResponse,
   ParseSupplierReplyInput,
@@ -300,20 +302,27 @@ export const useUpdateSettings = <TError = ErrorType<unknown>,
       return useMutation(getUpdateSettingsMutationOptions(options));
     }
 
-export const getGetZohoAuthUrlUrl = () => {
+export const getGetZohoAuthUrlUrl = (params?: GetZohoAuthUrlParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/auth/zoho/connect`
+  return stringifiedParams.length > 0 ? `/api/auth/zoho/connect?${stringifiedParams}` : `/api/auth/zoho/connect`
 }
 
 /**
  * @summary Get Zoho OAuth authorization URL
  */
-export const getZohoAuthUrl = async ( options?: RequestInit): Promise<ZohoAuthUrl> => {
+export const getZohoAuthUrl = async (params?: GetZohoAuthUrlParams, options?: RequestInit): Promise<ZohoAuthUrl> => {
 
-  return customFetch<ZohoAuthUrl>(getGetZohoAuthUrlUrl(),
+  return customFetch<ZohoAuthUrl>(getGetZohoAuthUrlUrl(params),
   {
     ...options,
     method: 'GET'
@@ -326,23 +335,23 @@ export const getZohoAuthUrl = async ( options?: RequestInit): Promise<ZohoAuthUr
 
 
 
-export const getGetZohoAuthUrlQueryKey = () => {
+export const getGetZohoAuthUrlQueryKey = (params?: GetZohoAuthUrlParams,) => {
     return [
-    `/api/auth/zoho/connect`
+    `/api/auth/zoho/connect`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetZohoAuthUrlQueryOptions = <TData = Awaited<ReturnType<typeof getZohoAuthUrl>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZohoAuthUrl>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetZohoAuthUrlQueryOptions = <TData = Awaited<ReturnType<typeof getZohoAuthUrl>>, TError = ErrorType<unknown>>(params?: GetZohoAuthUrlParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZohoAuthUrl>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetZohoAuthUrlQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetZohoAuthUrlQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getZohoAuthUrl>>> = ({ signal }) => getZohoAuthUrl({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getZohoAuthUrl>>> = ({ signal }) => getZohoAuthUrl(params, { signal, ...requestOptions });
 
 
 
@@ -360,11 +369,11 @@ export type GetZohoAuthUrlQueryError = ErrorType<unknown>
  */
 
 export function useGetZohoAuthUrl<TData = Awaited<ReturnType<typeof getZohoAuthUrl>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZohoAuthUrl>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetZohoAuthUrlParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZohoAuthUrl>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetZohoAuthUrlQueryOptions(options)
+  const queryOptions = getGetZohoAuthUrlQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -386,7 +395,7 @@ export const getGetZohoStatusUrl = () => {
 }
 
 /**
- * @summary Get Zoho connection status
+ * @summary Get Zoho connection status (primary account)
  */
 export const getZohoStatus = async ( options?: RequestInit): Promise<ZohoStatus> => {
 
@@ -433,7 +442,7 @@ export type GetZohoStatusQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Get Zoho connection status
+ * @summary Get Zoho connection status (primary account)
  */
 
 export function useGetZohoStatus<TData = Awaited<ReturnType<typeof getZohoStatus>>, TError = ErrorType<unknown>>(
@@ -454,6 +463,153 @@ export function useGetZohoStatus<TData = Awaited<ReturnType<typeof getZohoStatus
 
 
 
+export const getGetZohoAccountsUrl = () => {
+
+
+
+
+  return `/api/auth/zoho/accounts`
+}
+
+/**
+ * @summary List all connected Zoho accounts
+ */
+export const getZohoAccounts = async ( options?: RequestInit): Promise<GetZohoAccounts200> => {
+
+  return customFetch<GetZohoAccounts200>(getGetZohoAccountsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetZohoAccountsQueryKey = () => {
+    return [
+    `/api/auth/zoho/accounts`
+    ] as const;
+    }
+
+
+export const getGetZohoAccountsQueryOptions = <TData = Awaited<ReturnType<typeof getZohoAccounts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZohoAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetZohoAccountsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getZohoAccounts>>> = ({ signal }) => getZohoAccounts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getZohoAccounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetZohoAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof getZohoAccounts>>>
+export type GetZohoAccountsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all connected Zoho accounts
+ */
+
+export function useGetZohoAccounts<TData = Awaited<ReturnType<typeof getZohoAccounts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZohoAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetZohoAccountsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getDisconnectZohoAccountUrl = (id: number,) => {
+
+
+
+
+  return `/api/auth/zoho/accounts/${id}`
+}
+
+/**
+ * @summary Disconnect a specific Zoho account
+ */
+export const disconnectZohoAccount = async (id: number, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getDisconnectZohoAccountUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDisconnectZohoAccountMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectZohoAccount>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disconnectZohoAccount>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['disconnectZohoAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disconnectZohoAccount>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  disconnectZohoAccount(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisconnectZohoAccountMutationResult = NonNullable<Awaited<ReturnType<typeof disconnectZohoAccount>>>
+
+    export type DisconnectZohoAccountMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Disconnect a specific Zoho account
+ */
+export const useDisconnectZohoAccount = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectZohoAccount>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disconnectZohoAccount>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDisconnectZohoAccountMutationOptions(options));
+    }
+
 export const getDisconnectZohoUrl = () => {
 
 
@@ -463,7 +619,7 @@ export const getDisconnectZohoUrl = () => {
 }
 
 /**
- * @summary Disconnect Zoho Mail
+ * @summary Disconnect all Zoho accounts
  */
 export const disconnectZoho = async ( options?: RequestInit): Promise<OkResponse> => {
 
@@ -511,7 +667,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DisconnectZohoMutationError = ErrorType<unknown>
 
     /**
- * @summary Disconnect Zoho Mail
+ * @summary Disconnect all Zoho accounts
  */
 export const useDisconnectZoho = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disconnectZoho>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}

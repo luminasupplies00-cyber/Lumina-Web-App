@@ -70,6 +70,12 @@ paths:
       operationId: getZohoAuthUrl
       tags: [zoho]
       summary: Get Zoho OAuth authorization URL
+      parameters:
+        - in: query
+          name: label
+          schema:
+            type: string
+          description: Account label (Owner, Sales, Procurement, etc.)
       responses:
         "200":
           description: Auth URL
@@ -82,7 +88,7 @@ paths:
     get:
       operationId: getZohoStatus
       tags: [zoho]
-      summary: Get Zoho connection status
+      summary: Get Zoho connection status (primary account)
       responses:
         "200":
           description: Connection status
@@ -91,11 +97,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/ZohoStatus"
 
+  /auth/zoho/accounts:
+    get:
+      operationId: getZohoAccounts
+      tags: [zoho]
+      summary: List all connected Zoho accounts
+      responses:
+        "200":
+          description: List of connected accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accounts]
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ZohoAccount"
+
+  /auth/zoho/accounts/{id}:
+    delete:
+      operationId: disconnectZohoAccount
+      tags: [zoho]
+      summary: Disconnect a specific Zoho account
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
   /auth/zoho/disconnect:
     delete:
       operationId: disconnectZoho
       tags: [zoho]
-      summary: Disconnect Zoho Mail
+      summary: Disconnect all Zoho accounts
       responses:
         "200":
           description: Disconnected
@@ -751,6 +795,27 @@ components:
         authUrl:
           type: string
 
+    ZohoAccount:
+      type: object
+      required: [id, accountId, email, accountLabel, connectedAt, isActive]
+      properties:
+        id:
+          type: integer
+        accountId:
+          type: string
+        email:
+          type: string
+        accountLabel:
+          type: string
+        connectedAt:
+          type: string
+        lastSyncedAt:
+          type: ["string", "null"]
+        tokenExpiry:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+
     ZohoStatus:
       type: object
       required: [connected]
@@ -761,16 +826,20 @@ components:
           type: ["string", "null"]
         accountId:
           type: ["string", "null"]
+        accountLabel:
+          type: ["string", "null"]
         connectedAt:
           type: ["string", "null"]
         lastSyncedAt:
           type: ["string", "null"]
         tokenExpiry:
           type: ["string", "null"]
+        totalAccounts:
+          type: ["integer", "null"]
 
     SyncResult:
       type: object
-      required: [ok, synced, rfqsCreated]
+      required: [ok, synced]
       properties:
         ok:
           type: boolean
@@ -778,6 +847,23 @@ components:
           type: integer
         rfqsCreated:
           type: integer
+        accounts:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              email:
+                type: string
+              synced:
+                type: integer
+              rfqsCreated:
+                type: integer
+              errors:
+                type: integer
+              error:
+                type: string
 
     SyncStatus:
       type: object
@@ -789,6 +875,8 @@ components:
           type: ["string", "null"]
         lastSyncedAt:
           type: ["string", "null"]
+        totalAccounts:
+          type: ["integer", "null"]
 
     EmailThread:
       type: object

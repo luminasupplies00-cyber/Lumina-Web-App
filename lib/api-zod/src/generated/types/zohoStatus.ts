@@ -13,9 +13,13 @@ export interface ZohoStatus {
   /** @nullable */
   accountId?: string | null;
   /** @nullable */
+  accountLabel?: string | null;
+  /** @nullable */
   connectedAt?: string | null;
   /** @nullable */
   lastSyncedAt?: string | null;
   /** @nullable */
   tokenExpiry?: string | null;
+  /** @nullable */
+  totalAccounts?: number | null;
 }

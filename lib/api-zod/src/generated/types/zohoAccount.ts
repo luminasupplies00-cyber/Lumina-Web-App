@@ -6,12 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface SyncStatus {
-  connected: boolean;
-  /** @nullable */
-  email?: string | null;
+export interface ZohoAccount {
+  id: number;
+  accountId: string;
+  email: string;
+  accountLabel: string;
+  connectedAt: string;
   /** @nullable */
   lastSyncedAt?: string | null;
   /** @nullable */
-  totalAccounts?: number | null;
+  tokenExpiry?: string | null;
+  isActive: boolean;
 }

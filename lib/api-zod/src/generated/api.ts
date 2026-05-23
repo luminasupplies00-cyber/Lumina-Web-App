@@ -37,26 +37,61 @@ export const UpdateSettingsResponse = zod.object({
 /**
  * @summary Get Zoho OAuth authorization URL
  */
+export const GetZohoAuthUrlQueryParams = zod.object({
+  "label": zod.coerce.string().optional().describe('Account label (Owner, Sales, Procurement, etc.)')
+})
+
 export const GetZohoAuthUrlResponse = zod.object({
   "authUrl": zod.string()
 })
 
 
 /**
- * @summary Get Zoho connection status
+ * @summary Get Zoho connection status (primary account)
  */
 export const GetZohoStatusResponse = zod.object({
   "connected": zod.boolean(),
   "email": zod.string().nullish(),
   "accountId": zod.string().nullish(),
+  "accountLabel": zod.string().nullish(),
   "connectedAt": zod.string().nullish(),
   "lastSyncedAt": zod.string().nullish(),
-  "tokenExpiry": zod.string().nullish()
+  "tokenExpiry": zod.string().nullish(),
+  "totalAccounts": zod.number().nullish()
 })
 
 
 /**
- * @summary Disconnect Zoho Mail
+ * @summary List all connected Zoho accounts
+ */
+export const GetZohoAccountsResponse = zod.object({
+  "accounts": zod.array(zod.object({
+  "id": zod.number(),
+  "accountId": zod.string(),
+  "email": zod.string(),
+  "accountLabel": zod.string(),
+  "connectedAt": zod.string(),
+  "lastSyncedAt": zod.string().nullish(),
+  "tokenExpiry": zod.string().nullish(),
+  "isActive": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Disconnect a specific Zoho account
+ */
+export const DisconnectZohoAccountParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DisconnectZohoAccountResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Disconnect all Zoho accounts
  */
 export const DisconnectZohoResponse = zod.object({
   "ok": zod.boolean()
@@ -69,7 +104,15 @@ export const DisconnectZohoResponse = zod.object({
 export const RunSyncResponse = zod.object({
   "ok": zod.boolean(),
   "synced": zod.number(),
-  "rfqsCreated": zod.number()
+  "rfqsCreated": zod.number().optional(),
+  "accounts": zod.array(zod.object({
+  "label": zod.string().optional(),
+  "email": zod.string().optional(),
+  "synced": zod.number().optional(),
+  "rfqsCreated": zod.number().optional(),
+  "errors": zod.number().optional(),
+  "error": zod.string().optional()
+})).optional()
 })
 
 
@@ -79,7 +122,8 @@ export const RunSyncResponse = zod.object({
 export const GetSyncStatusResponse = zod.object({
   "connected": zod.boolean(),
   "email": zod.string().nullish(),
-  "lastSyncedAt": zod.string().nullish()
+  "lastSyncedAt": zod.string().nullish(),
+  "totalAccounts": zod.number().nullish()
 })
 
 

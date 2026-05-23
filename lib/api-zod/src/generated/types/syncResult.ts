@@ -5,9 +5,11 @@
  * Lumina HQ API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SyncResultAccountsItem } from './syncResultAccountsItem';
 
 export interface SyncResult {
   ok: boolean;
   synced: number;
-  rfqsCreated: number;
+  rfqsCreated?: number;
+  accounts?: SyncResultAccountsItem[];
 }

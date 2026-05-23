@@ -4,23 +4,31 @@ import { eq } from "drizzle-orm";
 import { decrypt, encrypt } from "./encrypt.js";
 import { logger } from "./logger.js";
 
-export async function getZohoConnection() {
-  const rows = await db.select().from(zohoConnectionsTable).limit(1);
-  if (rows.length === 0) return null;
-  const conn = rows[0]!;
-  return {
+type ConnRow = typeof zohoConnectionsTable.$inferSelect;
+
+export type DecryptedZohoConnection = Omit<ConnRow, "accessToken" | "refreshToken"> & {
+  accessToken: string;
+  refreshToken: string;
+};
+
+export async function getAllZohoConnections(): Promise<DecryptedZohoConnection[]> {
+  const rows = await db
+    .select()
+    .from(zohoConnectionsTable)
+    .where(eq(zohoConnectionsTable.isActive, true));
+  return rows.map((conn) => ({
     ...conn,
     accessToken: decrypt(conn.accessToken),
     refreshToken: decrypt(conn.refreshToken),
-  };
+  }));
 }
 
-export async function refreshZohoTokenIfNeeded(conn: {
-  id: number;
-  refreshToken: string;
-  tokenExpiry: Date;
-  accountsDomain: string;
-}): Promise<string> {
+export async function getZohoConnection(): Promise<DecryptedZohoConnection | null> {
+  const all = await getAllZohoConnections();
+  return all[0] ?? null;
+}
+
+export async function refreshZohoTokenIfNeeded(conn: DecryptedZohoConnection): Promise<string> {
   const now = new Date();
   const expiryWithBuffer = new Date(conn.tokenExpiry.getTime() - 5 * 60 * 1000);
 
@@ -35,7 +43,7 @@ export async function refreshZohoTokenIfNeeded(conn: {
     return decrypt(raw);
   }
 
-  logger.info({ connId: conn.id }, "Refreshing Zoho access token");
+  logger.info({ connId: conn.id, label: conn.accountLabel }, "Refreshing Zoho access token");
 
   const domain = conn.accountsDomain || "accounts.zoho.com";
   const clientId = await getSettingValue("ZOHO_CLIENT_ID");
@@ -86,10 +94,10 @@ export async function refreshZohoTokenIfNeeded(conn: {
   return data.access_token;
 }
 
-export async function zohoGet(path: string): Promise<unknown> {
-  const conn = await getZohoConnection();
-  if (!conn) throw new Error("Zoho not connected");
-
+export async function zohoGetForConnection(
+  conn: DecryptedZohoConnection,
+  path: string,
+): Promise<unknown> {
   const token = await refreshZohoTokenIfNeeded(conn);
 
   const res = await fetch(`https://mail.zoho.com/api${path}`, {
@@ -105,6 +113,12 @@ export async function zohoGet(path: string): Promise<unknown> {
   }
 
   return res.json();
+}
+
+export async function zohoGet(path: string): Promise<unknown> {
+  const conn = await getZohoConnection();
+  if (!conn) throw new Error("Zoho not connected");
+  return zohoGetForConnection(conn, path);
 }
 
 async function getSettingValue(key: string): Promise<string | null> {

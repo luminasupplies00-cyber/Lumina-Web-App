@@ -25,6 +25,19 @@ export interface ZohoAuthUrl {
   authUrl: string;
 }
 
+export interface ZohoAccount {
+  id: number;
+  accountId: string;
+  email: string;
+  accountLabel: string;
+  connectedAt: string;
+  /** @nullable */
+  lastSyncedAt?: string | null;
+  /** @nullable */
+  tokenExpiry?: string | null;
+  isActive: boolean;
+}
+
 export interface ZohoStatus {
   connected: boolean;
   /** @nullable */
@@ -32,17 +45,31 @@ export interface ZohoStatus {
   /** @nullable */
   accountId?: string | null;
   /** @nullable */
+  accountLabel?: string | null;
+  /** @nullable */
   connectedAt?: string | null;
   /** @nullable */
   lastSyncedAt?: string | null;
   /** @nullable */
   tokenExpiry?: string | null;
+  /** @nullable */
+  totalAccounts?: number | null;
 }
+
+export type SyncResultAccountsItem = {
+  label?: string;
+  email?: string;
+  synced?: number;
+  rfqsCreated?: number;
+  errors?: number;
+  error?: string;
+};
 
 export interface SyncResult {
   ok: boolean;
   synced: number;
-  rfqsCreated: number;
+  rfqsCreated?: number;
+  accounts?: SyncResultAccountsItem[];
 }
 
 export interface SyncStatus {
@@ -51,6 +78,8 @@ export interface SyncStatus {
   email?: string | null;
   /** @nullable */
   lastSyncedAt?: string | null;
+  /** @nullable */
+  totalAccounts?: number | null;
 }
 
 export interface EmailThread {
@@ -537,6 +566,17 @@ export interface ComparisonResponse {
   model?: string;
   landedCostBufferPercent?: number;
 }
+
+export type GetZohoAuthUrlParams = {
+/**
+ * Account label (Owner, Sales, Procurement, etc.)
+ */
+label?: string;
+};
+
+export type GetZohoAccounts200 = {
+  accounts: ZohoAccount[];
+};
 
 export type GetThreadsParams = {
 classification?: string;

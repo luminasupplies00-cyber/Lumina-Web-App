@@ -6,21 +6,24 @@ import {
   rfqRecordsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { zohoGet, getZohoConnection, refreshZohoTokenIfNeeded } from "../lib/zohoClient.js";
+import { getAllZohoConnections, zohoGetForConnection, type DecryptedZohoConnection } from "../lib/zohoClient.js";
 import { callAI } from "../lib/aiClient.js";
 import { AI_MAX_TOKENS } from "../lib/aiConstants.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
 
-interface ZohoThread {
-  threadId: string;
-  subject: string;
-  fromAddress: string;
+// Zoho Mail API message structure (messages/view endpoint)
+interface ZohoMessage {
+  messageId: string;       // primary identifier
+  threadId?: string;       // may or may not be present
+  subject?: string;
+  fromAddress?: string;
   fromDisplayName?: string;
-  receivedTime: string;
+  receivedTime?: string;   // unix ms as string
   summary?: string;
-  messageId?: string;
+  hasAttachment?: boolean;
+  folderId?: string;
 }
 
 interface TriageResult {
@@ -69,19 +72,10 @@ Respond ONLY with valid JSON in this exact format:
   "customer_company": "<string or null>",
   "deadline": "<string or null>",
   "urgency": "<low|medium|high>",
-  "products": [
-    {
-      "product_name": "<string>",
-      "catalogue_number": "<string or null>",
-      "brand": "<string or null>",
-      "quantity": "<string or null>",
-      "specifications": "<string or null>"
-    }
-  ]
+  "products": []
 }
 
-Only include products array if classification is RFQ and products are mentioned.
-If not RFQ, set products to [].`;
+Only populate products array if classification is RFQ and products are clearly mentioned.`;
 
   const userMessage = `Subject: ${thread.subject}
 From: ${thread.senderName} <${thread.senderEmail}>
@@ -108,69 +102,75 @@ ${thread.snippet}`;
   }
 }
 
-router.post("/sync/run", async (req, res) => {
-  try {
-    const conn = await getZohoConnection();
-    if (!conn) {
-      res.status(400).json({ error: "Zoho not connected. Configure it in Settings." });
-      return;
+async function syncAccount(
+  conn: DecryptedZohoConnection,
+  log: typeof logger,
+): Promise<{ synced: number; rfqsCreated: number; errors: number }> {
+  let synced = 0;
+  let rfqsCreated = 0;
+  let errors = 0;
+
+  const accountData = (await zohoGetForConnection(
+    conn,
+    `/accounts/${conn.accountId}/messages/view?limit=50&start=1`,
+  )) as { data?: ZohoMessage[] };
+
+  const messages = accountData.data ?? [];
+  log.info({ accountId: conn.accountId, label: conn.accountLabel, count: messages.length }, "Fetched messages");
+
+  for (const message of messages) {
+    // Use messageId as the unique identifier — this is what Zoho actually returns
+    const uniqueId = message.messageId;
+    if (!uniqueId) {
+      log.warn({ message }, "Message has no messageId — skipping");
+      errors++;
+      continue;
     }
 
-    await refreshZohoTokenIfNeeded(conn);
+    // Prefix with account to avoid cross-account collisions
+    const threadKey = `${conn.accountId}:${uniqueId}`;
 
-    const accountData = (await zohoGet(`/accounts/${conn.accountId}/messages/view?limit=50&start=1`)) as {
-      data?: ZohoThread[];
-    };
+    const existing = await db
+      .select({ id: emailThreadsTable.id })
+      .from(emailThreadsTable)
+      .where(eq(emailThreadsTable.threadId, threadKey))
+      .limit(1);
 
-    const threads = accountData.data ?? [];
-    let synced = 0;
-    let rfqsCreated = 0;
+    const receivedAt = message.receivedTime
+      ? new Date(parseInt(message.receivedTime))
+      : new Date();
 
-    for (const thread of threads) {
-      const existing = await db
-        .select({ id: emailThreadsTable.id })
-        .from(emailThreadsTable)
-        .where(eq(emailThreadsTable.threadId, thread.threadId))
-        .limit(1);
+    const senderEmail = message.fromAddress ?? "";
+    const senderName = message.fromDisplayName ?? senderEmail.split("@")[0] ?? senderEmail;
+    const snippet = message.summary ?? "";
+    const subject = message.subject ?? "(no subject)";
 
-      const receivedAt = thread.receivedTime
-        ? new Date(parseInt(thread.receivedTime))
-        : new Date();
+    let classification = "General";
+    let isRfq = false;
+    let triageResult: TriageResult | null = null;
 
-      const senderParts = thread.fromAddress?.split("@") ?? [];
-      const senderEmail = thread.fromAddress ?? "";
-      const senderName = thread.fromDisplayName ?? senderParts[0] ?? senderEmail;
-      const snippet = thread.summary ?? "";
+    try {
+      triageResult = await triageEmail({ subject, senderName, senderEmail, snippet });
+      classification = triageResult.classification;
+      isRfq = classification === "RFQ";
+    } catch (err) {
+      log.warn({ err, messageId: uniqueId }, "AI triage failed, skipping classification");
+    }
 
-      let classification = "General";
-      let isRfq = false;
-      let triageResult: TriageResult | null = null;
-
-      try {
-        triageResult = await triageEmail({
-          subject: thread.subject ?? "(no subject)",
-          senderName,
-          senderEmail,
-          snippet,
-        });
-        classification = triageResult.classification;
-        isRfq = classification === "RFQ";
-      } catch (err) {
-        logger.warn({ err, threadId: thread.threadId }, "AI triage failed, skipping classification");
-      }
-
+    try {
       if (existing.length === 0) {
         const [inserted] = await db
           .insert(emailThreadsTable)
           .values({
-            threadId: thread.threadId,
-            subject: thread.subject ?? "(no subject)",
+            threadId: threadKey,
+            subject,
             senderName,
             senderEmail,
             receivedAt,
-            snippet,
+            snippet: snippet || null,
             classification,
             isRfq,
+            hasAttachments: message.hasAttachment ?? false,
           })
           .returning();
 
@@ -190,6 +190,7 @@ router.post("/sync/run", async (req, res) => {
               stage: "NEW",
               urgency: triageResult.urgency ?? "medium",
               deadline: triageResult.deadline ?? null,
+              sourceChannel: "inbound_email",
               aiNextAction: "Extract products from email and contact suppliers",
             });
             rfqsCreated++;
@@ -197,20 +198,84 @@ router.post("/sync/run", async (req, res) => {
         }
         synced++;
       } else {
+        // Update classification on existing threads
         await db
           .update(emailThreadsTable)
           .set({ classification, isRfq })
-          .where(eq(emailThreadsTable.threadId, thread.threadId));
+          .where(eq(emailThreadsTable.threadId, threadKey));
+      }
+    } catch (err) {
+      log.error({ err, messageId: uniqueId }, "Failed to save message to DB");
+      errors++;
+    }
+  }
+
+  // Update last synced timestamp for this connection
+  await db
+    .update(zohoConnectionsTable)
+    .set({ lastSyncedAt: new Date() })
+    .where(eq(zohoConnectionsTable.id, conn.id));
+
+  return { synced, rfqsCreated, errors };
+}
+
+router.post("/sync/run", async (req, res) => {
+  try {
+    const connections = await getAllZohoConnections();
+
+    if (connections.length === 0) {
+      res.status(400).json({ error: "No Zoho accounts connected. Configure them in Settings." });
+      return;
+    }
+
+    let totalSynced = 0;
+    let totalRfqs = 0;
+    let totalErrors = 0;
+    const accountResults: Array<{
+      label: string;
+      email: string;
+      synced: number;
+      rfqsCreated: number;
+      errors: number;
+      error?: string;
+    }> = [];
+
+    for (const conn of connections) {
+      try {
+        const result = await syncAccount(conn, req.log);
+        totalSynced += result.synced;
+        totalRfqs += result.rfqsCreated;
+        totalErrors += result.errors;
+        accountResults.push({
+          label: conn.accountLabel,
+          email: conn.email,
+          ...result,
+        });
+        req.log.info(
+          { label: conn.accountLabel, email: conn.email, ...result },
+          "Account sync complete",
+        );
+      } catch (err) {
+        req.log.error({ err, label: conn.accountLabel, email: conn.email }, "Account sync failed");
+        accountResults.push({
+          label: conn.accountLabel,
+          email: conn.email,
+          synced: 0,
+          rfqsCreated: 0,
+          errors: 1,
+          error: String(err),
+        });
+        totalErrors++;
       }
     }
 
-    await db
-      .update(zohoConnectionsTable)
-      .set({ lastSyncedAt: new Date() })
-      .where(eq(zohoConnectionsTable.id, conn.id));
-
-    req.log.info({ synced, rfqsCreated }, "Sync complete");
-    res.json({ ok: true, synced, rfqsCreated });
+    req.log.info({ totalSynced, totalRfqs, totalErrors }, "Full sync complete");
+    res.json({
+      ok: true,
+      synced: totalSynced,
+      rfqsCreated: totalRfqs,
+      accounts: accountResults,
+    });
   } catch (err) {
     req.log.error({ err }, "Sync failed");
     res.status(500).json({ error: String(err) });
@@ -223,19 +288,28 @@ router.get("/sync/status", async (req, res) => {
       .select({
         lastSyncedAt: zohoConnectionsTable.lastSyncedAt,
         email: zohoConnectionsTable.email,
+        isActive: zohoConnectionsTable.isActive,
       })
       .from(zohoConnectionsTable)
-      .limit(1);
+      .where(eq(zohoConnectionsTable.isActive, true));
 
     if (rows.length === 0) {
       res.json({ connected: false, lastSyncedAt: null });
       return;
     }
 
+    // Return the most recent sync time across all accounts
+    const latestSync = rows.reduce<Date | null>((latest, row) => {
+      if (!row.lastSyncedAt) return latest;
+      if (!latest) return row.lastSyncedAt;
+      return row.lastSyncedAt > latest ? row.lastSyncedAt : latest;
+    }, null);
+
     res.json({
       connected: true,
       email: rows[0]!.email,
-      lastSyncedAt: rows[0]!.lastSyncedAt,
+      lastSyncedAt: latestSync,
+      totalAccounts: rows.length,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get sync status");
