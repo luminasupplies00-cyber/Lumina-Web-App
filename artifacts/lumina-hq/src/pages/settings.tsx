@@ -20,12 +20,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, Mail } from "lucide-react";
+import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, Mail, Pencil } from "lucide-react";
 
-const ACCOUNT_LABELS = ["Owner", "Sales", "Procurement", "Support", "Finance", "General"] as const;
-type AccountLabel = (typeof ACCOUNT_LABELS)[number];
+const SUGGESTED_LABELS = ["Owner", "Sales", "Procurement", "Support", "Finance", "General"] as const;
+type SuggestedLabel = (typeof SUGGESTED_LABELS)[number];
 
-const LABEL_COLORS: Record<AccountLabel, string> = {
+const LABEL_COLORS: Record<string, string> = {
   Owner: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   Sales: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   Procurement: "bg-orange-500/20 text-orange-400 border-orange-500/30",
@@ -33,6 +33,8 @@ const LABEL_COLORS: Record<AccountLabel, string> = {
   Finance: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   General: "bg-muted text-muted-foreground border-border",
 };
+const CUSTOM_LABEL_COLOR = "bg-cyan-500/20 text-cyan-400 border-cyan-500/30";
+const labelClassFor = (label: string) => LABEL_COLORS[label] ?? CUSTOM_LABEL_COLOR;
 
 export default function Settings() {
   return (
@@ -56,13 +58,22 @@ function ZohoAccountsCard() {
   const disconnect = useDisconnectZohoAccount();
   const runSync = useRunSync();
   const [addDialog, setAddDialog] = useState(false);
-  const [selectedLabel, setSelectedLabel] = useState<AccountLabel>("General");
+  const [selectedLabel, setSelectedLabel] = useState<string>("General");
   const [fetchingUrl, setFetchingUrl] = useState(false);
 
   const accounts = accountsData?.accounts ?? [];
   const hasAccounts = accounts.length > 0;
 
-  const handleGetAuthUrl = async (label: AccountLabel) => {
+  const handleGetAuthUrl = async (rawLabel: string) => {
+    const label = rawLabel.trim();
+    if (!label) {
+      toast.error("Please enter a label for this account");
+      return;
+    }
+    if (label.length > 32) {
+      toast.error("Label must be 32 characters or fewer");
+      return;
+    }
     setFetchingUrl(true);
     try {
       const res = await fetch(`/api/auth/zoho/connect?label=${encodeURIComponent(label)}`);
@@ -183,22 +194,32 @@ function ZohoAccountsCard() {
 
           <div className="space-y-4 py-2">
             <div>
-              <label className="text-sm font-medium mb-2 block">Account Role</label>
-              <div className="grid grid-cols-2 gap-2">
-                {ACCOUNT_LABELS.map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors text-left ${
-                      selectedLabel === label
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-muted/30 text-muted-foreground hover:text-foreground hover:border-border/80"
-                    }`}
-                    onClick={() => setSelectedLabel(label)}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <label className="text-sm font-medium mb-2 block">Account Label</label>
+              <Input
+                value={selectedLabel}
+                onChange={(e) => setSelectedLabel(e.target.value)}
+                placeholder="e.g. Owner, Lab Manager, Riyadh Office"
+                maxLength={32}
+                className="h-9"
+              />
+              <div className="mt-2">
+                <div className="text-[11px] text-muted-foreground mb-1.5">Suggestions:</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {SUGGESTED_LABELS.map((label) => (
+                    <button
+                      key={label}
+                      type="button"
+                      className={`px-2 py-1 rounded-md border text-xs font-medium transition-colors ${
+                        selectedLabel === label
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-muted/30 text-muted-foreground hover:text-foreground hover:border-border/80"
+                      }`}
+                      onClick={() => setSelectedLabel(label)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -235,8 +256,14 @@ function AccountRow({
   onLabelChanged: () => void;
 }) {
   const updateLabel = useUpdateZohoAccountLabel();
-  const label = (account.accountLabel || "General") as AccountLabel;
-  const labelClass = LABEL_COLORS[label] || LABEL_COLORS.General;
+  const label: string = account.accountLabel || "General";
+  const labelClass = labelClassFor(label);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+
+  useEffect(() => {
+    setDraft(label);
+  }, [label]);
 
   const lastSync = account.lastSyncedAt
     ? new Date(account.lastSyncedAt).toLocaleString("en-GB", {
@@ -249,16 +276,29 @@ function AccountRow({
 
   const tokenExpired = account.tokenExpiry ? new Date(account.tokenExpiry) < new Date() : false;
 
-  const handleChangeLabel = (newLabel: string) => {
-    if (newLabel === label) return;
+  const commitLabel = () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (!next || next === label) {
+      setDraft(label);
+      return;
+    }
+    if (next.length > 32) {
+      toast.error("Label must be 32 characters or fewer");
+      setDraft(label);
+      return;
+    }
     updateLabel.mutate(
-      { id: account.id, data: { accountLabel: newLabel } },
+      { id: account.id, data: { accountLabel: next } },
       {
         onSuccess: () => {
-          toast.success(`Role updated to ${newLabel}`);
+          toast.success(`Label updated to "${next}"`);
           onLabelChanged();
         },
-        onError: () => toast.error("Failed to update role"),
+        onError: () => {
+          toast.error("Failed to update label");
+          setDraft(label);
+        },
       },
     );
   };
@@ -291,18 +331,35 @@ function AccountRow({
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <Select value={label} onValueChange={handleChangeLabel} disabled={updateLabel.isPending}>
-          <SelectTrigger className="h-7 w-32 text-xs">
-            <SelectValue placeholder="Role" />
-          </SelectTrigger>
-          <SelectContent>
-            {ACCOUNT_LABELS.map((l) => (
-              <SelectItem key={l} value={l} className="text-xs">
-                {l}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {editing ? (
+          <Input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitLabel}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitLabel();
+              else if (e.key === "Escape") {
+                setDraft(label);
+                setEditing(false);
+              }
+            }}
+            maxLength={32}
+            placeholder="Label"
+            className="h-7 w-40 text-xs"
+            disabled={updateLabel.isPending}
+          />
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setEditing(true)}
+            disabled={updateLabel.isPending}
+          >
+            <Pencil className="w-3.5 h-3.5 mr-1" /> Edit label
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

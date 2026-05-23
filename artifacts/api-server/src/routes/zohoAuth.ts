@@ -20,7 +20,7 @@ async function getSetting(key: string): Promise<string | null> {
   }
 }
 
-// GET /auth/zoho/connect?label=Sales
+// GET /auth/zoho/connect?label=Sales (any free-text label, max 32 chars)
 router.get("/auth/zoho/connect", async (req, res) => {
   try {
     const label = (req.query["label"] as string) || "General";
@@ -226,14 +226,14 @@ router.get("/auth/zoho/accounts", async (req, res) => {
 router.patch("/auth/zoho/accounts/:id", async (req, res) => {
   try {
     const id = parseInt(req.params["id"] ?? "0");
-    const { accountLabel } = req.body as { accountLabel?: string };
-    if (!accountLabel || typeof accountLabel !== "string") {
+    const raw = (req.body as { accountLabel?: string }).accountLabel;
+    if (!raw || typeof raw !== "string") {
       res.status(400).json({ error: "accountLabel is required" });
       return;
     }
-    const allowed = ["Owner", "Sales", "Procurement", "Support", "Finance", "General"];
-    if (!allowed.includes(accountLabel)) {
-      res.status(400).json({ error: `accountLabel must be one of: ${allowed.join(", ")}` });
+    const accountLabel = raw.trim();
+    if (accountLabel.length < 1 || accountLabel.length > 32) {
+      res.status(400).json({ error: "accountLabel must be 1-32 characters" });
       return;
     }
     await db

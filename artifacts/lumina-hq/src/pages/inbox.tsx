@@ -139,6 +139,9 @@ export default function Inbox() {
       const bi = ROLE_ORDER.indexOf(b.accountLabel);
       const aRank = ai === -1 ? ROLE_ORDER.length : ai;
       const bRank = bi === -1 ? ROLE_ORDER.length : bi;
+      if (aRank === bRank && ai === -1) {
+        return a.accountLabel.localeCompare(b.accountLabel);
+      }
       if (aRank !== bRank) return aRank - bRank;
       return a.email.localeCompare(b.email);
     });
