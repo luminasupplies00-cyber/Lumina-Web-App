@@ -8,4 +8,6 @@ export const AI_MAX_TOKENS = {
   SUPPLIER_QUOTE_PARSE: 600,
   ATTACHMENT_IMAGE: 1000,
   RECLASSIFY: 150,
+  SUMMARIZE: 250,           // 2-3 sentence summary + key action + deadlines
+  DRAFT_REPLY: 500,         // editable email reply body
 } as const;

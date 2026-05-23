@@ -11,6 +11,7 @@ export const zohoConnectionsTable = pgTable("zoho_connections", {
   refreshToken: text("refresh_token").notNull(),
   tokenExpiry: timestamp("token_expiry", { withTimezone: true }).notNull(),
   accountsDomain: text("accounts_domain").notNull().default("accounts.zoho.com"),
+  scope: text("scope"),    // OAuth scope string granted by Zoho at last connect
   isActive: boolean("is_active").notNull().default(true),
   connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),

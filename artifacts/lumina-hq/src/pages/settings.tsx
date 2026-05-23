@@ -169,7 +169,9 @@ function ZohoAccountsCard() {
                   key={account.id}
                   account={account}
                   onDisconnect={() => handleDisconnect(account.id, account.email)}
+                  onReconnect={() => handleGetAuthUrl(account.accountLabel || "General")}
                   disconnecting={disconnect.isPending}
+                  reconnecting={fetchingUrl}
                   onLabelChanged={() => {
                     refetch();
                     queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
@@ -247,12 +249,16 @@ function ZohoAccountsCard() {
 function AccountRow({
   account,
   onDisconnect,
+  onReconnect,
   disconnecting,
+  reconnecting,
   onLabelChanged,
 }: {
   account: any;
   onDisconnect: () => void;
+  onReconnect: () => void;
   disconnecting: boolean;
+  reconnecting: boolean;
   onLabelChanged: () => void;
 }) {
   const updateLabel = useUpdateZohoAccountLabel();
@@ -324,6 +330,11 @@ function AccountRow({
                 Token expired
               </Badge>
             )}
+            {account.hasWriteScope === false && (
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-500/30 bg-amber-500/10 text-amber-400">
+                Read-only · Reconnect for send/archive
+              </Badge>
+            )}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
             Last synced: {lastSync}
@@ -358,6 +369,17 @@ function AccountRow({
             disabled={updateLabel.isPending}
           >
             <Pencil className="w-3.5 h-3.5 mr-1" /> Edit label
+          </Button>
+        )}
+        {account.hasWriteScope === false && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:text-amber-200"
+            onClick={onReconnect}
+            disabled={reconnecting}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1 ${reconnecting ? "animate-spin" : ""}`} /> Reconnect
           </Button>
         )}
         <Button

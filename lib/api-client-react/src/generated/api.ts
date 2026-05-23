@@ -20,22 +20,29 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ArchiveThread200,
   BackfillRfqsFromThreads200,
   ComparisonResponse,
   CreateRfqFromThread200,
   CustomerQuoteParams,
   CustomerQuoteRevisionResponse,
   CustomerQuotesResponse,
+  DeleteThread200,
   DraftResponse,
+  EmailDraftReply,
+  EmailSummary,
   ExtractionConfirmInput,
   ExtractionConfirmResponse,
   FollowupDraftResponse,
+  FullEmailResponse,
   GetSuppliersParams,
   GetThreadCounts200,
   GetThreadsParams,
   GetZohoAccounts200,
   GetZohoAuthUrlParams,
   HealthStatus,
+  MarkReadInput,
+  MarkThreadRead200,
   OkResponse,
   ParseSupplierReplyInput,
   ParsedSupplierReplyResponse,
@@ -49,6 +56,8 @@ import type {
   RfqPipelineResponse,
   RfqRecordResponse,
   RfqUpdate,
+  SendEmailInput,
+  SendThreadReply200,
   SettingsInput,
   SettingsResponse,
   StageUpdate,
@@ -1135,6 +1144,519 @@ export function useGetThreadCounts<TData = Awaited<ReturnType<typeof getThreadCo
 
 
 
+export const getDownloadThreadAttachmentUrl = (id: number,
+    attId: string,) => {
+
+
+
+
+  return `/api/threads/${id}/attachments/${attId}`
+}
+
+/**
+ * @summary Download an attachment binary from Zoho via the server proxy
+ */
+export const downloadThreadAttachment = async (id: number,
+    attId: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadThreadAttachmentUrl(id,attId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadThreadAttachmentQueryKey = (id: number,
+    attId: string,) => {
+    return [
+    `/api/threads/${id}/attachments/${attId}`
+    ] as const;
+    }
+
+
+export const getDownloadThreadAttachmentQueryOptions = <TData = Awaited<ReturnType<typeof downloadThreadAttachment>>, TError = ErrorType<unknown>>(id: number,
+    attId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadThreadAttachment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadThreadAttachmentQueryKey(id,attId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadThreadAttachment>>> = ({ signal }) => downloadThreadAttachment(id,attId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id && attId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadThreadAttachment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadThreadAttachmentQueryResult = NonNullable<Awaited<ReturnType<typeof downloadThreadAttachment>>>
+export type DownloadThreadAttachmentQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Download an attachment binary from Zoho via the server proxy
+ */
+
+export function useDownloadThreadAttachment<TData = Awaited<ReturnType<typeof downloadThreadAttachment>>, TError = ErrorType<unknown>>(
+ id: number,
+    attId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadThreadAttachment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadThreadAttachmentQueryOptions(id,attId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetThreadFullUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}/full`
+}
+
+/**
+ * @summary Fetch full email body (HTML) + attachments from Zoho; marks as read
+ */
+export const getThreadFull = async (id: number, options?: RequestInit): Promise<FullEmailResponse> => {
+
+  return customFetch<FullEmailResponse>(getGetThreadFullUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetThreadFullQueryKey = (id: number,) => {
+    return [
+    `/api/threads/${id}/full`
+    ] as const;
+    }
+
+
+export const getGetThreadFullQueryOptions = <TData = Awaited<ReturnType<typeof getThreadFull>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getThreadFull>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetThreadFullQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getThreadFull>>> = ({ signal }) => getThreadFull(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getThreadFull>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetThreadFullQueryResult = NonNullable<Awaited<ReturnType<typeof getThreadFull>>>
+export type GetThreadFullQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Fetch full email body (HTML) + attachments from Zoho; marks as read
+ */
+
+export function useGetThreadFull<TData = Awaited<ReturnType<typeof getThreadFull>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getThreadFull>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetThreadFullQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getMarkThreadReadUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}/mark-read`
+}
+
+/**
+ * @summary Mark email as read or unread (Zoho + local)
+ */
+export const markThreadRead = async (id: number,
+    markReadInput: MarkReadInput, options?: RequestInit): Promise<MarkThreadRead200> => {
+
+  return customFetch<MarkThreadRead200>(getMarkThreadReadUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      markReadInput,)
+  }
+);}
+
+
+
+
+export const getMarkThreadReadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markThreadRead>>, TError,{id: number;data: BodyType<MarkReadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markThreadRead>>, TError,{id: number;data: BodyType<MarkReadInput>}, TContext> => {
+
+const mutationKey = ['markThreadRead'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markThreadRead>>, {id: number;data: BodyType<MarkReadInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  markThreadRead(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkThreadReadMutationResult = NonNullable<Awaited<ReturnType<typeof markThreadRead>>>
+    export type MarkThreadReadMutationBody = BodyType<MarkReadInput>
+    export type MarkThreadReadMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark email as read or unread (Zoho + local)
+ */
+export const useMarkThreadRead = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markThreadRead>>, TError,{id: number;data: BodyType<MarkReadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markThreadRead>>,
+        TError,
+        {id: number;data: BodyType<MarkReadInput>},
+        TContext
+      > => {
+      return useMutation(getMarkThreadReadMutationOptions(options));
+    }
+
+export const getArchiveThreadUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}/archive`
+}
+
+/**
+ * @summary Move email to Archive folder in Zoho and remove from inbox
+ */
+export const archiveThread = async (id: number, options?: RequestInit): Promise<ArchiveThread200> => {
+
+  return customFetch<ArchiveThread200>(getArchiveThreadUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getArchiveThreadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveThread>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['archiveThread'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveThread>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  archiveThread(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveThreadMutationResult = NonNullable<Awaited<ReturnType<typeof archiveThread>>>
+
+    export type ArchiveThreadMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Move email to Archive folder in Zoho and remove from inbox
+ */
+export const useArchiveThread = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveThread>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getArchiveThreadMutationOptions(options));
+    }
+
+export const getSummarizeThreadUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}/summarize`
+}
+
+/**
+ * @summary AI summary of the email (Claude)
+ */
+export const summarizeThread = async (id: number, options?: RequestInit): Promise<EmailSummary> => {
+
+  return customFetch<EmailSummary>(getSummarizeThreadUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSummarizeThreadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof summarizeThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof summarizeThread>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['summarizeThread'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof summarizeThread>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  summarizeThread(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SummarizeThreadMutationResult = NonNullable<Awaited<ReturnType<typeof summarizeThread>>>
+
+    export type SummarizeThreadMutationError = ErrorType<unknown>
+
+    /**
+ * @summary AI summary of the email (Claude)
+ */
+export const useSummarizeThread = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof summarizeThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof summarizeThread>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getSummarizeThreadMutationOptions(options));
+    }
+
+export const getDraftReplyForThreadUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}/draft-reply`
+}
+
+/**
+ * @summary AI-drafted reply for the email (Claude)
+ */
+export const draftReplyForThread = async (id: number, options?: RequestInit): Promise<EmailDraftReply> => {
+
+  return customFetch<EmailDraftReply>(getDraftReplyForThreadUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDraftReplyForThreadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftReplyForThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftReplyForThread>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['draftReplyForThread'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftReplyForThread>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  draftReplyForThread(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftReplyForThreadMutationResult = NonNullable<Awaited<ReturnType<typeof draftReplyForThread>>>
+
+    export type DraftReplyForThreadMutationError = ErrorType<unknown>
+
+    /**
+ * @summary AI-drafted reply for the email (Claude)
+ */
+export const useDraftReplyForThread = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftReplyForThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftReplyForThread>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDraftReplyForThreadMutationOptions(options));
+    }
+
+export const getSendThreadReplyUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}/send`
+}
+
+/**
+ * @summary Send a reply via Zoho Mail
+ */
+export const sendThreadReply = async (id: number,
+    sendEmailInput: SendEmailInput, options?: RequestInit): Promise<SendThreadReply200> => {
+
+  return customFetch<SendThreadReply200>(getSendThreadReplyUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      sendEmailInput,)
+  }
+);}
+
+
+
+
+export const getSendThreadReplyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendThreadReply>>, TError,{id: number;data: BodyType<SendEmailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendThreadReply>>, TError,{id: number;data: BodyType<SendEmailInput>}, TContext> => {
+
+const mutationKey = ['sendThreadReply'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendThreadReply>>, {id: number;data: BodyType<SendEmailInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  sendThreadReply(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendThreadReplyMutationResult = NonNullable<Awaited<ReturnType<typeof sendThreadReply>>>
+    export type SendThreadReplyMutationBody = BodyType<SendEmailInput>
+    export type SendThreadReplyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a reply via Zoho Mail
+ */
+export const useSendThreadReply = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendThreadReply>>, TError,{id: number;data: BodyType<SendEmailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendThreadReply>>,
+        TError,
+        {id: number;data: BodyType<SendEmailInput>},
+        TContext
+      > => {
+      return useMutation(getSendThreadReplyMutationOptions(options));
+    }
+
 export const getCreateRfqFromThreadUrl = (id: number,) => {
 
 
@@ -1351,6 +1873,76 @@ export function useGetThread<TData = Awaited<ReturnType<typeof getThread>>, TErr
 
 
 
+
+export const getDeleteThreadUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}`
+}
+
+/**
+ * @summary Move email to Trash in Zoho and remove from inbox
+ */
+export const deleteThread = async (id: number, options?: RequestInit): Promise<DeleteThread200> => {
+
+  return customFetch<DeleteThread200>(getDeleteThreadUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteThreadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteThread>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteThread'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteThread>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteThread(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteThreadMutationResult = NonNullable<Awaited<ReturnType<typeof deleteThread>>>
+
+    export type DeleteThreadMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Move email to Trash in Zoho and remove from inbox
+ */
+export const useDeleteThread = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteThread>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteThreadMutationOptions(options));
+    }
 
 export const getGetRfqsUrl = () => {
 

@@ -264,6 +264,159 @@ paths:
                     additionalProperties:
                       type: integer
 
+  /threads/{id}/attachments/{attId}:
+    get:
+      operationId: downloadThreadAttachment
+      tags: [threads]
+      summary: Download an attachment binary from Zoho via the server proxy
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: attId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Attachment binary stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /threads/{id}/full:
+    get:
+      operationId: getThreadFull
+      tags: [threads]
+      summary: Fetch full email body (HTML) + attachments from Zoho; marks as read
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Full email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FullEmailResponse"
+
+  /threads/{id}/mark-read:
+    post:
+      operationId: markThreadRead
+      tags: [threads]
+      summary: Mark email as read or unread (Zoho + local)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkReadInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, isRead]
+                properties:
+                  ok: { type: boolean }
+                  isRead: { type: boolean }
+
+  /threads/{id}/archive:
+    post:
+      operationId: archiveThread
+      tags: [threads]
+      summary: Move email to Archive folder in Zoho and remove from inbox
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Archived
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+
+  /threads/{id}/summarize:
+    post:
+      operationId: summarizeThread
+      tags: [threads]
+      summary: AI summary of the email (Claude)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailSummary"
+
+  /threads/{id}/draft-reply:
+    post:
+      operationId: draftReplyForThread
+      tags: [threads]
+      summary: AI-drafted reply for the email (Claude)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailDraftReply"
+
+  /threads/{id}/send:
+    post:
+      operationId: sendThreadReply
+      tags: [threads]
+      summary: Send a reply via Zoho Mail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendEmailInput"
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+
   /threads/{id}/create-rfq:
     post:
       operationId: createRfqFromThread
@@ -330,6 +483,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ThreadResponse"
+    delete:
+      operationId: deleteThread
+      tags: [threads]
+      summary: Move email to Trash in Zoho and remove from inbox
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
 
   /rfq:
     get:
@@ -948,7 +1121,7 @@ components:
 
     ZohoAccount:
       type: object
-      required: [id, accountId, email, accountLabel, connectedAt, isActive]
+      required: [id, accountId, email, accountLabel, connectedAt, isActive, hasWriteScope]
       properties:
         id:
           type: integer
@@ -964,6 +1137,11 @@ components:
           type: ["string", "null"]
         tokenExpiry:
           type: ["string", "null"]
+        scope:
+          type: ["string", "null"]
+        hasWriteScope:
+          type: boolean
+          description: True when granted scope includes ZohoMail.messages.ALL (required for send/archive/delete)
         isActive:
           type: boolean
 
@@ -1064,6 +1242,91 @@ components:
         rfqId:
           type: ["integer", "null"]
           description: ID of the linked rfq_record if one exists; null otherwise.
+        bodyHtml:
+          type: ["string", "null"]
+        isRead:
+          type: boolean
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAttachment"
+
+    EmailAttachment:
+      type: object
+      required: [attachmentId, name]
+      properties:
+        attachmentId:
+          type: string
+        name:
+          type: string
+        size:
+          type: ["integer", "null"]
+        type:
+          type: ["string", "null"]
+
+    FullEmailResponse:
+      type: object
+      required: [thread, bodyHtml, bodyText, attachments, cached]
+      properties:
+        thread:
+          $ref: "#/components/schemas/EmailThread"
+        bodyHtml:
+          type: string
+        bodyText:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAttachment"
+        cached:
+          type: boolean
+
+    EmailSummary:
+      type: object
+      required: [summary, action, deadline]
+      properties:
+        summary:
+          type: string
+        action:
+          type: string
+        deadline:
+          type: string
+
+    EmailDraftReply:
+      type: object
+      required: [to, replyTo, subject, body]
+      properties:
+        to:
+          type: string
+        replyTo:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+
+    MarkReadInput:
+      type: object
+      required: [isRead]
+      properties:
+        isRead:
+          type: boolean
+
+    SendEmailInput:
+      type: object
+      required: [to, subject, body]
+      properties:
+        to:
+          type: string
+        cc:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        mailFormat:
+          type: string
+          enum: [html, plaintext]
 
     ThreadsResponse:
       type: object

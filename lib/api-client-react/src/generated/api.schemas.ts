@@ -40,6 +40,10 @@ export interface ZohoAccount {
   lastSyncedAt?: string | null;
   /** @nullable */
   tokenExpiry?: string | null;
+  /** @nullable */
+  scope?: string | null;
+  /** True when granted scope includes ZohoMail.messages.ALL (required for send/archive/delete) */
+  hasWriteScope: boolean;
   isActive: boolean;
 }
 
@@ -87,6 +91,15 @@ export interface SyncStatus {
   totalAccounts?: number | null;
 }
 
+export interface EmailAttachment {
+  attachmentId: string;
+  name: string;
+  /** @nullable */
+  size?: number | null;
+  /** @nullable */
+  type?: string | null;
+}
+
 export interface EmailThread {
   id: number;
   threadId: string;
@@ -111,6 +124,51 @@ export interface EmailThread {
      * @nullable
      */
   rfqId?: number | null;
+  /** @nullable */
+  bodyHtml?: string | null;
+  isRead?: boolean;
+  attachments?: EmailAttachment[];
+}
+
+export interface FullEmailResponse {
+  thread: EmailThread;
+  bodyHtml: string;
+  bodyText: string;
+  attachments: EmailAttachment[];
+  cached: boolean;
+}
+
+export interface EmailSummary {
+  summary: string;
+  action: string;
+  deadline: string;
+}
+
+export interface EmailDraftReply {
+  to: string;
+  replyTo: string;
+  subject: string;
+  body: string;
+}
+
+export interface MarkReadInput {
+  isRead: boolean;
+}
+
+export type SendEmailInputMailFormat = typeof SendEmailInputMailFormat[keyof typeof SendEmailInputMailFormat];
+
+
+export const SendEmailInputMailFormat = {
+  html: 'html',
+  plaintext: 'plaintext',
+} as const;
+
+export interface SendEmailInput {
+  to: string;
+  cc?: string;
+  subject: string;
+  body: string;
+  mailFormat?: SendEmailInputMailFormat;
 }
 
 export interface ThreadsResponse {
@@ -604,6 +662,19 @@ export type GetThreadCounts200 = {
   counts: GetThreadCounts200Counts;
 };
 
+export type MarkThreadRead200 = {
+  ok: boolean;
+  isRead: boolean;
+};
+
+export type ArchiveThread200 = {
+  ok: boolean;
+};
+
+export type SendThreadReply200 = {
+  ok: boolean;
+};
+
 export type CreateRfqFromThread200 = {
   ok: boolean;
   rfqId?: number;
@@ -614,6 +685,10 @@ export type BackfillRfqsFromThreads200 = {
   ok: boolean;
   created: number;
   scanned: number;
+};
+
+export type DeleteThread200 = {
+  ok: boolean;
 };
 
 export type ReclassifyAll200Counts = {[key: string]: number};

@@ -16,5 +16,9 @@ export interface ZohoAccount {
   lastSyncedAt?: string | null;
   /** @nullable */
   tokenExpiry?: string | null;
+  /** @nullable */
+  scope?: string | null;
+  /** True when granted scope includes ZohoMail.messages.ALL (required for send/archive/delete) */
+  hasWriteScope: boolean;
   isActive: boolean;
 }

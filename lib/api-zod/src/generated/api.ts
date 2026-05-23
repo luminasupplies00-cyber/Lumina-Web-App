@@ -73,6 +73,8 @@ export const GetZohoAccountsResponse = zod.object({
   "connectedAt": zod.string(),
   "lastSyncedAt": zod.string().nullish(),
   "tokenExpiry": zod.string().nullish(),
+  "scope": zod.string().nullish(),
+  "hasWriteScope": zod.boolean().describe('True when granted scope includes ZohoMail.messages.ALL (required for send\/archive\/delete)'),
   "isActive": zod.boolean()
 }))
 })
@@ -190,7 +192,15 @@ export const GetThreadsResponse = zod.object({
   "attachmentParsed": zod.boolean().optional(),
   "attachmentType": zod.string().nullish(),
   "syncedAt": zod.string(),
-  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.')
+  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.'),
+  "bodyHtml": zod.string().nullish(),
+  "isRead": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
 }))
 })
 
@@ -201,6 +211,138 @@ export const GetThreadsResponse = zod.object({
 export const GetThreadCountsResponse = zod.object({
   "total": zod.number(),
   "counts": zod.record(zod.string(), zod.number())
+})
+
+
+/**
+ * @summary Download an attachment binary from Zoho via the server proxy
+ */
+export const DownloadThreadAttachmentParams = zod.object({
+  "id": zod.coerce.number(),
+  "attId": zod.coerce.string()
+})
+
+
+/**
+ * @summary Fetch full email body (HTML) + attachments from Zoho; marks as read
+ */
+export const GetThreadFullParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetThreadFullResponse = zod.object({
+  "thread": zod.object({
+  "id": zod.number(),
+  "threadId": zod.string(),
+  "subject": zod.string(),
+  "senderName": zod.string(),
+  "senderEmail": zod.string(),
+  "receivedAt": zod.string(),
+  "snippet": zod.string().nullish(),
+  "bodyText": zod.string().nullish(),
+  "classification": zod.string().nullish(),
+  "isRfq": zod.boolean(),
+  "hasAttachments": zod.boolean().optional(),
+  "attachmentParsed": zod.boolean().optional(),
+  "attachmentType": zod.string().nullish(),
+  "syncedAt": zod.string(),
+  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.'),
+  "bodyHtml": zod.string().nullish(),
+  "isRead": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
+}),
+  "bodyHtml": zod.string(),
+  "bodyText": zod.string(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})),
+  "cached": zod.boolean()
+})
+
+
+/**
+ * @summary Mark email as read or unread (Zoho + local)
+ */
+export const MarkThreadReadParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const MarkThreadReadBody = zod.object({
+  "isRead": zod.boolean()
+})
+
+export const MarkThreadReadResponse = zod.object({
+  "ok": zod.boolean(),
+  "isRead": zod.boolean()
+})
+
+
+/**
+ * @summary Move email to Archive folder in Zoho and remove from inbox
+ */
+export const ArchiveThreadParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ArchiveThreadResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary AI summary of the email (Claude)
+ */
+export const SummarizeThreadParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SummarizeThreadResponse = zod.object({
+  "summary": zod.string(),
+  "action": zod.string(),
+  "deadline": zod.string()
+})
+
+
+/**
+ * @summary AI-drafted reply for the email (Claude)
+ */
+export const DraftReplyForThreadParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DraftReplyForThreadResponse = zod.object({
+  "to": zod.string(),
+  "replyTo": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string()
+})
+
+
+/**
+ * @summary Send a reply via Zoho Mail
+ */
+export const SendThreadReplyParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SendThreadReplyBody = zod.object({
+  "to": zod.string(),
+  "cc": zod.string().optional(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "mailFormat": zod.enum(['html', 'plaintext']).optional()
+})
+
+export const SendThreadReplyResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 
@@ -251,8 +393,28 @@ export const GetThreadResponse = zod.object({
   "attachmentParsed": zod.boolean().optional(),
   "attachmentType": zod.string().nullish(),
   "syncedAt": zod.string(),
-  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.')
+  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.'),
+  "bodyHtml": zod.string().nullish(),
+  "isRead": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
 })
+})
+
+
+/**
+ * @summary Move email to Trash in Zoho and remove from inbox
+ */
+export const DeleteThreadParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteThreadResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 
@@ -412,7 +574,15 @@ export const GetRfqResponse = zod.object({
   "attachmentParsed": zod.boolean().optional(),
   "attachmentType": zod.string().nullish(),
   "syncedAt": zod.string(),
-  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.')
+  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.'),
+  "bodyHtml": zod.string().nullish(),
+  "isRead": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
 }).optional()
 })
 

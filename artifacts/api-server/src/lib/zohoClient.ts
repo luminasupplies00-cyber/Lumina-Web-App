@@ -121,6 +121,253 @@ export async function zohoGet(path: string): Promise<unknown> {
   return zohoGetForConnection(conn, path);
 }
 
+// ─── Write helpers (require ZohoMail.messages.ALL scope) ─────────────────────
+
+async function zohoRequestForConnection(
+  conn: DecryptedZohoConnection,
+  method: "POST" | "PUT" | "DELETE",
+  path: string,
+  body?: unknown,
+): Promise<unknown> {
+  const token = await refreshZohoTokenIfNeeded(conn);
+  const res = await fetch(`https://mail.zoho.com/api${path}`, {
+    method,
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 401 || /OAUTH_SCOPE_MISMATCH|INVALID_OAUTHTOKEN/i.test(text)) {
+      throw new Error(`Zoho scope insufficient — reconnect required (${res.status})`);
+    }
+    throw new Error(`Zoho API error ${res.status}: ${text}`);
+  }
+  // Some Zoho update endpoints return empty body
+  const txt = await res.text();
+  if (!txt) return {};
+  try {
+    return JSON.parse(txt);
+  } catch {
+    return { raw: txt };
+  }
+}
+
+export function zohoPostForConnection(
+  conn: DecryptedZohoConnection,
+  path: string,
+  body: unknown,
+): Promise<unknown> {
+  return zohoRequestForConnection(conn, "POST", path, body);
+}
+
+export function zohoPutForConnection(
+  conn: DecryptedZohoConnection,
+  path: string,
+  body: unknown,
+): Promise<unknown> {
+  return zohoRequestForConnection(conn, "PUT", path, body);
+}
+
+export function zohoDeleteForConnection(
+  conn: DecryptedZohoConnection,
+  path: string,
+): Promise<unknown> {
+  return zohoRequestForConnection(conn, "DELETE", path);
+}
+
+// Fetch raw binary (attachment download)
+export async function zohoGetBinaryForConnection(
+  conn: DecryptedZohoConnection,
+  path: string,
+): Promise<{ buffer: Buffer; contentType: string; filename?: string }> {
+  const token = await refreshZohoTokenIfNeeded(conn);
+  const res = await fetch(`https://mail.zoho.com/api${path}`, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Zoho download error ${res.status}: ${text}`);
+  }
+  const contentType = res.headers.get("content-type") ?? "application/octet-stream";
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const filenameMatch = /filename\*?=(?:UTF-8'')?\"?([^\";]+)\"?/i.exec(disposition);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const result: { buffer: Buffer; contentType: string; filename?: string } = { buffer, contentType };
+  if (filenameMatch?.[1]) {
+    result.filename = decodeURIComponent(filenameMatch[1]);
+  }
+  return result;
+}
+
+// ─── Domain helpers ──────────────────────────────────────────────────────────
+
+export type ZohoMessageDetail = {
+  bodyText: string;
+  bodyHtml: string;
+  attachments: Array<{ attachmentId: string; name: string; size?: number; type?: string }>;
+  folderId?: string;
+  isRead?: boolean;
+};
+
+export async function fetchFullMessage(
+  conn: DecryptedZohoConnection,
+  messageId: string,
+): Promise<ZohoMessageDetail> {
+  type Detail = {
+    data?: {
+      content?: string;
+      summary?: string;
+      folderId?: string;
+      status?: number | string;
+      flagid?: string;
+      attachments?: Array<{
+        attachmentId?: string;
+        id?: string;
+        attachmentName?: string;
+        fileName?: string;
+        attachmentSize?: number | string;
+        size?: number | string;
+        attachmentType?: string;
+        contentType?: string;
+      }>;
+    };
+  };
+  const detail = (await zohoGetForConnection(
+    conn,
+    `/accounts/${conn.accountId}/messages/${messageId}`,
+  )) as Detail;
+  const data = detail.data ?? {};
+  const html = data.content ?? "";
+  // Strip HTML for plaintext fallback
+  const text = html
+    ? html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+    : (data.summary ?? "");
+  const attachments = (data.attachments ?? []).map((a) => {
+    const sizeRaw = a.attachmentSize ?? a.size;
+    const sizeNum = typeof sizeRaw === "string" ? parseInt(sizeRaw, 10) : sizeRaw;
+    const att: { attachmentId: string; name: string; size?: number; type?: string } = {
+      attachmentId: a.attachmentId ?? a.id ?? "",
+      name: a.attachmentName ?? a.fileName ?? "attachment",
+    };
+    if (sizeNum !== undefined && !Number.isNaN(sizeNum)) att.size = sizeNum;
+    const tp = a.attachmentType ?? a.contentType;
+    if (tp) att.type = tp;
+    return att;
+  });
+  const result: ZohoMessageDetail = {
+    bodyText: text,
+    bodyHtml: html,
+    attachments,
+  };
+  if (data.folderId) result.folderId = String(data.folderId);
+  // Zoho: status 0 = unread, 1 = read (varies by endpoint version)
+  if (data.status !== undefined) result.isRead = String(data.status) !== "0";
+  return result;
+}
+
+export async function markMessageRead(
+  conn: DecryptedZohoConnection,
+  messageId: string,
+  isRead: boolean,
+): Promise<void> {
+  await zohoPutForConnection(conn, `/accounts/${conn.accountId}/updatemessage`, {
+    mode: isRead ? "markAsRead" : "markAsUnread",
+    messageId: [messageId],
+  });
+}
+
+type FolderCache = { archiveId?: string; trashId?: string; fetchedAt: number };
+const folderCacheByAccount = new Map<string, FolderCache>();
+
+export async function getFolderIds(
+  conn: DecryptedZohoConnection,
+): Promise<{ archiveId?: string; trashId?: string }> {
+  const cached = folderCacheByAccount.get(conn.accountId);
+  if (cached && Date.now() - cached.fetchedAt < 10 * 60 * 1000) {
+    const out: { archiveId?: string; trashId?: string } = {};
+    if (cached.archiveId) out.archiveId = cached.archiveId;
+    if (cached.trashId) out.trashId = cached.trashId;
+    return out;
+  }
+  type FoldersResp = { data?: Array<{ folderId: string; folderName: string; folderType?: string }> };
+  const resp = (await zohoGetForConnection(
+    conn,
+    `/accounts/${conn.accountId}/folders`,
+  )) as FoldersResp;
+  const folders = resp.data ?? [];
+  const archive = folders.find((f) => /archive/i.test(f.folderName) || f.folderType === "Archive");
+  const trash = folders.find((f) => /trash/i.test(f.folderName) || f.folderType === "Trash");
+  const cache: FolderCache = { fetchedAt: Date.now() };
+  if (archive?.folderId) cache.archiveId = archive.folderId;
+  if (trash?.folderId) cache.trashId = trash.folderId;
+  folderCacheByAccount.set(conn.accountId, cache);
+  const out: { archiveId?: string; trashId?: string } = {};
+  if (cache.archiveId) out.archiveId = cache.archiveId;
+  if (cache.trashId) out.trashId = cache.trashId;
+  return out;
+}
+
+export async function archiveMessage(
+  conn: DecryptedZohoConnection,
+  messageId: string,
+): Promise<void> {
+  const { archiveId } = await getFolderIds(conn);
+  if (!archiveId) throw new Error("No Archive folder found in Zoho account");
+  await zohoPutForConnection(conn, `/accounts/${conn.accountId}/updatemessage`, {
+    mode: "moveMessage",
+    messageId: [messageId],
+    destfolderId: archiveId,
+  });
+}
+
+export async function trashMessage(
+  conn: DecryptedZohoConnection,
+  messageId: string,
+): Promise<void> {
+  await zohoPutForConnection(conn, `/accounts/${conn.accountId}/updatemessage`, {
+    mode: "moveToTrash",
+    messageId: [messageId],
+  });
+}
+
+export type SendMessageInput = {
+  toAddress: string;     // comma-separated
+  ccAddress?: string;
+  subject: string;
+  content: string;
+  mailFormat?: "html" | "plaintext";
+  fromAddress?: string;  // defaults to conn.email
+};
+
+export async function sendMessage(
+  conn: DecryptedZohoConnection,
+  input: SendMessageInput,
+): Promise<unknown> {
+  const body: Record<string, unknown> = {
+    fromAddress: input.fromAddress ?? conn.email,
+    toAddress: input.toAddress,
+    subject: input.subject,
+    content: input.content,
+    mailFormat: input.mailFormat ?? "html",
+  };
+  if (input.ccAddress) body["ccAddress"] = input.ccAddress;
+  return zohoPostForConnection(conn, `/accounts/${conn.accountId}/messages`, body);
+}
+
+export async function downloadAttachment(
+  conn: DecryptedZohoConnection,
+  messageId: string,
+  attachmentId: string,
+): Promise<{ buffer: Buffer; contentType: string; filename?: string }> {
+  return zohoGetBinaryForConnection(
+    conn,
+    `/accounts/${conn.accountId}/messages/${messageId}/attachments/${attachmentId}`,
+  );
+}
+
 async function getSettingValue(key: string): Promise<string | null> {
   const { appSettingsTable } = await import("@workspace/db");
   const rows = await db

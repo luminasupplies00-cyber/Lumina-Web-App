@@ -41,7 +41,7 @@ router.get("/auth/zoho/connect", async (req, res) => {
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
-      scope: "ZohoMail.messages.READ,ZohoMail.accounts.READ",
+      scope: "ZohoMail.messages.ALL,ZohoMail.folders.ALL,ZohoMail.accounts.READ,ZohoMail.attachments.READ",
       redirect_uri: redirectUri,
       access_type: "offline",
       state,
@@ -115,6 +115,7 @@ router.get("/auth/zoho/callback", async (req, res) => {
       access_token?: string;
       refresh_token?: string;
       expires_in?: number;
+      scope?: string;
       error?: string;
     };
 
@@ -160,6 +161,8 @@ router.get("/auth/zoho/callback", async (req, res) => {
       .where(eq(zohoConnectionsTable.accountId, accountId))
       .limit(1);
 
+    const grantedScope = tokenData.scope ?? null;
+
     if (existing[0]) {
       await db
         .update(zohoConnectionsTable)
@@ -170,6 +173,7 @@ router.get("/auth/zoho/callback", async (req, res) => {
           refreshToken: encrypt(tokenData.refresh_token),
           tokenExpiry,
           accountsDomain,
+          scope: grantedScope,
           isActive: true,
         })
         .where(eq(zohoConnectionsTable.accountId, accountId));
@@ -182,6 +186,7 @@ router.get("/auth/zoho/callback", async (req, res) => {
         refreshToken: encrypt(tokenData.refresh_token),
         tokenExpiry,
         accountsDomain,
+        scope: grantedScope,
         isActive: true,
       });
     }
@@ -209,13 +214,18 @@ router.get("/auth/zoho/accounts", async (req, res) => {
         connectedAt: zohoConnectionsTable.connectedAt,
         lastSyncedAt: zohoConnectionsTable.lastSyncedAt,
         tokenExpiry: zohoConnectionsTable.tokenExpiry,
+        scope: zohoConnectionsTable.scope,
         isActive: zohoConnectionsTable.isActive,
       })
       .from(zohoConnectionsTable)
       .where(eq(zohoConnectionsTable.isActive, true))
       .orderBy(zohoConnectionsTable.connectedAt);
 
-    res.json({ accounts: rows });
+    const accounts = rows.map((r) => ({
+      ...r,
+      hasWriteScope: !!r.scope && r.scope.includes("ZohoMail.messages.ALL"),
+    }));
+    res.json({ accounts });
   } catch (err) {
     req.log.error({ err }, "Failed to list Zoho accounts");
     res.status(500).json({ error: "Failed to list accounts" });

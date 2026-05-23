@@ -9,10 +9,12 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, ExternalLink, ArrowRight, RefreshCw, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { EmailDetailSheet } from "@/components/EmailDetailSheet";
 
 // ─── Classification config ─────────────────────────────────────────────────────
 
@@ -125,6 +127,7 @@ interface ZohoAccount {
   email: string;
   accountLabel: string;
   lastSyncedAt?: string | null;
+  hasWriteScope?: boolean;
 }
 
 export default function Inbox() {
@@ -236,8 +239,33 @@ export default function Inbox() {
   const totalCount = countsData?.total ?? 0;
   const isSyncing = syncAll.isPending || syncOne.isPending;
 
+  // Email detail panel state
+  type ThreadItem = NonNullable<typeof data>["threads"][number];
+  const [selectedThread, setSelectedThread] = useState<ThreadItem | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const accountsNeedingReconnect = accounts.filter((a) => a.hasWriteScope === false);
+  const apiBase = "/api";
+
   return (
     <div className="space-y-4 max-w-6xl mx-auto">
+      {/* Reconnect banner */}
+      {accountsNeedingReconnect.length > 0 && (
+        <Alert className="bg-amber-500/10 border-amber-500/30">
+          <AlertTriangle className="h-4 w-4 text-amber-400" />
+          <AlertDescription className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm">
+              <span className="text-amber-300 font-semibold">Reconnect required:</span>{" "}
+              {accountsNeedingReconnect.map((a) => a.email).join(", ")} {accountsNeedingReconnect.length === 1 ? "is" : "are"} connected with read-only scope.
+              Reply, archive, and delete actions will fail until you reconnect.
+            </span>
+            <Button size="sm" variant="outline" asChild>
+              <a href="/settings"><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Go to Settings</a>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
         <h1 className="text-2xl font-bold tracking-tight">Inbox</h1>
@@ -347,56 +375,76 @@ export default function Inbox() {
         ) : !data?.threads || data.threads.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground text-sm">No emails match the current filters.</div>
         ) : (
-          data.threads.map((thread) => (
-            <div
-              key={thread.id}
-              className="p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-muted/20 transition-colors"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                  <span className="font-medium text-sm">{thread.senderName}</span>
-                  <span className="text-xs text-muted-foreground">&lt;{thread.senderEmail}&gt;</span>
-                  <ClassificationBadge
-                    classification={thread.classification}
-                    confidence={(thread as { aiConfidence?: string | null }).aiConfidence}
-                    reasoning={(thread as { aiReasoning?: string | null }).aiReasoning}
-                  />
+          data.threads.map((thread) => {
+            const isRead = (thread as { isRead?: boolean }).isRead ?? false;
+            const rfqId = (thread as { rfqId?: number | null }).rfqId;
+            return (
+              <div
+                key={thread.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setSelectedThread(thread);
+                  setSheetOpen(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedThread(thread);
+                    setSheetOpen(true);
+                  }
+                }}
+                className={`w-full text-left p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer ${!isRead ? "bg-cyan-500/[0.03]" : ""}`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    {!isRead && <Circle className="h-2 w-2 fill-cyan-400 text-cyan-400 shrink-0" />}
+                    <span className={`text-sm ${!isRead ? "font-semibold" : "font-medium"}`}>{thread.senderName}</span>
+                    <span className="text-xs text-muted-foreground">&lt;{thread.senderEmail}&gt;</span>
+                    <ClassificationBadge
+                      classification={thread.classification}
+                      confidence={(thread as { aiConfidence?: string | null }).aiConfidence}
+                      reasoning={(thread as { aiReasoning?: string | null }).aiReasoning}
+                    />
+                  </div>
+                  <div className={`text-sm truncate ${!isRead ? "font-semibold" : "font-medium"}`}>{thread.subject}</div>
+                  <div className="text-xs text-muted-foreground truncate mt-0.5">{thread.snippet}</div>
                 </div>
-                <div className="font-semibold text-sm truncate">{thread.subject}</div>
-                <div className="text-xs text-muted-foreground truncate mt-0.5">{thread.snippet}</div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 sm:flex-col sm:items-end">
-                <span className="text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(thread.receivedAt), { addSuffix: true })}
-                </span>
-                <div className="flex gap-1.5">
-                  <Button variant="outline" size="sm" asChild>
-                    <a
-                      href={`https://mail.zoho.com/zm/#mail/folder/inbox/p/${thread.threadId}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <ExternalLink className="h-3 w-3 mr-1" /> Zoho
-                    </a>
-                  </Button>
-                  {thread.classification === "RFQ" && !(thread as { rfqId?: number | null }).rfqId && (
-                    <Button size="sm" onClick={() => handleMoveToPipeline(thread)} disabled={createRfq.isPending}>
-                      <ArrowRight className="h-3 w-3 mr-1" /> Create RFQ
+                <div className="flex items-center gap-2 shrink-0 sm:flex-col sm:items-end" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(thread.receivedAt), { addSuffix: true })}
+                  </span>
+                  <div className="flex gap-1.5">
+                    <Button variant="ghost" size="sm" onClick={() => { setSelectedThread(thread); setSheetOpen(true); }} title="Open email">
+                      <Mail className="h-3 w-3 mr-1" /> Open
                     </Button>
-                  )}
-                  {(thread as { rfqId?: number | null }).rfqId && (
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={`/rfq/${(thread as { rfqId?: number }).rfqId}`}>
-                        <ArrowRight className="h-3 w-3 mr-1" /> Open RFQ
-                      </a>
-                    </Button>
-                  )}
+                    {thread.classification === "RFQ" && !rfqId && (
+                      <Button size="sm" onClick={(e) => { e.stopPropagation(); handleMoveToPipeline(thread); }} disabled={createRfq.isPending}>
+                        <ArrowRight className="h-3 w-3 mr-1" /> Create RFQ
+                      </Button>
+                    )}
+                    {rfqId && (
+                      <Button variant="outline" size="sm" asChild onClick={(e) => e.stopPropagation()}>
+                        <a href={`/rfq/${rfqId}`}>
+                          <ArrowRight className="h-3 w-3 mr-1" /> Open RFQ
+                        </a>
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
+
+      {/* Email detail slide-over */}
+      <EmailDetailSheet
+        thread={selectedThread as never}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        apiBase={apiBase}
+      />
 
       {/* Re-classify summary */}
       {reclassify.data && (

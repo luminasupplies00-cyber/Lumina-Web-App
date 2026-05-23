@@ -5,6 +5,7 @@
  * Lumina HQ API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { EmailAttachment } from './emailAttachment';
 
 export interface EmailThread {
   id: number;
@@ -30,4 +31,8 @@ export interface EmailThread {
      * @nullable
      */
   rfqId?: number | null;
+  /** @nullable */
+  bodyHtml?: string | null;
+  isRead?: boolean;
+  attachments?: EmailAttachment[];
 }

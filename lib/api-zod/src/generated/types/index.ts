@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './archiveThread200';
 export * from './backfillRfqsFromThreads200';
 export * from './comparisonResponse';
 export * from './comparisonRow';
@@ -14,12 +15,17 @@ export * from './customerQuoteParams';
 export * from './customerQuoteRecord';
 export * from './customerQuoteRevisionResponse';
 export * from './customerQuotesResponse';
+export * from './deleteThread200';
 export * from './draftResponse';
+export * from './emailAttachment';
+export * from './emailDraftReply';
+export * from './emailSummary';
 export * from './emailThread';
 export * from './extractionConfirmInput';
 export * from './extractionConfirmResponse';
 export * from './extractionReviewProduct';
 export * from './followupDraftResponse';
+export * from './fullEmailResponse';
 export * from './getSuppliersParams';
 export * from './getThreadCounts200';
 export * from './getThreadCounts200Counts';
@@ -27,6 +33,8 @@ export * from './getThreadsParams';
 export * from './getZohoAccounts200';
 export * from './getZohoAuthUrlParams';
 export * from './healthStatus';
+export * from './markReadInput';
+export * from './markThreadRead200';
 export * from './okResponse';
 export * from './parsedQuoteData';
 export * from './parsedQuoteLine';
@@ -48,6 +56,9 @@ export * from './rfqRecord';
 export * from './rfqRecordResponse';
 export * from './rfqUpdate';
 export * from './rfqWithProducts';
+export * from './sendEmailInput';
+export * from './sendEmailInputMailFormat';
+export * from './sendThreadReply200';
 export * from './settingsInput';
 export * from './settingsResponse';
 export * from './settingsResponseSettings';
