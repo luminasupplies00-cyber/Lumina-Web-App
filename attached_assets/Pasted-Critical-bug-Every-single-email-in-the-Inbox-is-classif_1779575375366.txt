@@ -1,0 +1,99 @@
+Critical bug: Every single email in the Inbox is classified
+as "General". No RFQs, no Supplier Replies, no Customer
+Follow-ups are being detected. The classification is broken.
+
+STEP 1 — DIAGNOSE FIRST, show me:
+1. The exact Claude prompt being used for classification
+2. What data is passed — is it subject only, or subject +
+   body + sender?
+3. The raw Claude response for the last 3 classified emails
+4. The max_tokens value being used
+5. Do not change anything yet — just show me these 4 things
+
+STEP 2 — After showing diagnosis, fix with this new prompt:
+
+Replace the existing triage system prompt with exactly this:
+
+---
+SYSTEM:
+You are an email classifier for Lumina Supplies, a B2B
+laboratory and scientific supplies company in Riyadh,
+Saudi Arabia.
+
+Classify into ONE of:
+- RFQ: customer requesting product pricing or quotation
+- SUPPLIER_REPLY: supplier sending pricing or availability
+- CUSTOMER_FOLLOWUP: customer asking about a sent quote
+- PO_INVOICE: purchase order, invoice, or payment
+- INTERNAL: from Lumina Supplies team
+- SPAM_NEWSLETTER: marketing, newsletters, notifications
+- GENERAL: none of the above
+
+RFQ signals (classify as RFQ if ANY present):
+- Words: RFQ, quotation, quote, pricing, inquiry, enquiry,
+  "please quote", "kindly provide", "we need", "price for",
+  "request for", "price list"
+- Catalogue numbers, part numbers, CAS numbers anywhere
+  in subject or body
+- Sender from hospital, clinic, lab, university, or
+  research institution
+- Any product names + quantities mentioned together
+- Arabic equivalent requests for pricing
+
+SUPPLIER_REPLY signals:
+- Sender is a manufacturer or distributor
+- Contains unit prices, lead times, MOQ
+- "our best price", "please find attached", "we can offer"
+- Price tables or product availability
+
+CRITICAL RULES:
+- Never default to GENERAL when unsure between RFQ and
+  GENERAL — if sender is a business and mentions products,
+  classify as RFQ
+- Arabic emails must be classified same as English
+- Do not classify as GENERAL just because email is in Arabic
+- Emails with catalogue or part numbers = RFQ or
+  SUPPLIER_REPLY, never GENERAL
+
+Return ONLY this JSON:
+{
+  "classification": "RFQ|SUPPLIER_REPLY|CUSTOMER_FOLLOWUP|PO_INVOICE|INTERNAL|SPAM_NEWSLETTER|GENERAL",
+  "confidence": "high|medium|low",
+  "reasoning": "one sentence max"
+}
+
+USER MESSAGE:
+From: {sender_name} <{sender_email}>
+Subject: {subject}
+Body: {body_first_2000_chars}
+Attachments: {attachment_names_or_none}
+---
+
+STEP 3 — Fix data passed to Claude:
+Confirm the full email body (minimum 1500 chars) is being
+passed, not just the subject line. If only the subject is
+being passed, that is the root cause — fix it to pass
+subject + sender + body.
+
+STEP 4 — Set max_tokens to 200 for classification
+(it only needs to return a small JSON object)
+
+STEP 5 — Add "Re-classify All" button in Inbox header
+- Re-runs classification on all existing synced threads
+- Updates classification in DB
+- Shows progress counter
+
+STEP 6 — Show classification badge correctly
+After re-classification, each email row must show:
+- Colored badge with classification label
+- RFQ = cyan
+- SUPPLIER_REPLY = amber  
+- CUSTOMER_FOLLOWUP = violet
+- PO_INVOICE = green
+- SPAM_NEWSLETTER = gray
+- GENERAL = dark gray
+- Low confidence = badge with "?" suffix
+
+STEP 7 — After implementing, trigger sync + re-classify
+and show me the breakdown:
+X RFQ, X Supplier Reply, X Customer Follow-up, X General
