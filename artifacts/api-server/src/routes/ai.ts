@@ -614,6 +614,26 @@ router.post("/ai/reclassify-all", async (req, res) => {
           })
           .where(eq(emailThreadsTable.id, thread.id));
 
+        // Create rfq_record on-the-fly if newly classified as RFQ and none exists
+        if (isRfq) {
+          const [existingRfq] = await db
+            .select({ id: rfqRecordsTable.id })
+            .from(rfqRecordsTable)
+            .where(eq(rfqRecordsTable.emailThreadId, thread.id))
+            .limit(1);
+          if (!existingRfq) {
+            await db.insert(rfqRecordsTable).values({
+              emailThreadId: thread.id,
+              customerName: thread.senderName,
+              customerEmail: thread.senderEmail,
+              stage: "NEW",
+              urgency: "medium",
+              sourceChannel: "inbound_email",
+              aiNextAction: "Extract products from email and contact suppliers",
+            });
+          }
+        }
+
         counts[result.classification] = (counts[result.classification] ?? 0) + 1;
         processed++;
       } catch (err) {

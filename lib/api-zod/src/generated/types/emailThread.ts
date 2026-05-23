@@ -25,4 +25,9 @@ export interface EmailThread {
   /** @nullable */
   attachmentType?: string | null;
   syncedAt: string;
+  /**
+     * ID of the linked rfq_record if one exists; null otherwise.
+     * @nullable
+     */
+  rfqId?: number | null;
 }

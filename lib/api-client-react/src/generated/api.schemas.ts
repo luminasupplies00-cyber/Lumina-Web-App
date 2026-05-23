@@ -106,6 +106,11 @@ export interface EmailThread {
   /** @nullable */
   attachmentType?: string | null;
   syncedAt: string;
+  /**
+     * ID of the linked rfq_record if one exists; null otherwise.
+     * @nullable
+     */
+  rfqId?: number | null;
 }
 
 export interface ThreadsResponse {
@@ -597,6 +602,18 @@ export type GetThreadCounts200Counts = {[key: string]: number};
 export type GetThreadCounts200 = {
   total: number;
   counts: GetThreadCounts200Counts;
+};
+
+export type CreateRfqFromThread200 = {
+  ok: boolean;
+  rfqId?: number;
+  created?: boolean;
+};
+
+export type BackfillRfqsFromThreads200 = {
+  ok: boolean;
+  created: number;
+  scanned: number;
 };
 
 export type ReclassifyAll200Counts = {[key: string]: number};

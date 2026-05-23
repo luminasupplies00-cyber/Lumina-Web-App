@@ -189,7 +189,8 @@ export const GetThreadsResponse = zod.object({
   "hasAttachments": zod.boolean().optional(),
   "attachmentParsed": zod.boolean().optional(),
   "attachmentType": zod.string().nullish(),
-  "syncedAt": zod.string()
+  "syncedAt": zod.string(),
+  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.')
 }))
 })
 
@@ -200,6 +201,30 @@ export const GetThreadsResponse = zod.object({
 export const GetThreadCountsResponse = zod.object({
   "total": zod.number(),
   "counts": zod.record(zod.string(), zod.number())
+})
+
+
+/**
+ * @summary Create an rfq_record from an email thread (idempotent)
+ */
+export const CreateRfqFromThreadParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateRfqFromThreadResponse = zod.object({
+  "ok": zod.boolean(),
+  "rfqId": zod.number().optional(),
+  "created": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Create rfq_records for all RFQ-classified threads missing one
+ */
+export const BackfillRfqsFromThreadsResponse = zod.object({
+  "ok": zod.boolean(),
+  "created": zod.number(),
+  "scanned": zod.number()
 })
 
 
@@ -225,7 +250,8 @@ export const GetThreadResponse = zod.object({
   "hasAttachments": zod.boolean().optional(),
   "attachmentParsed": zod.boolean().optional(),
   "attachmentType": zod.string().nullish(),
-  "syncedAt": zod.string()
+  "syncedAt": zod.string(),
+  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.')
 })
 })
 
@@ -385,7 +411,8 @@ export const GetRfqResponse = zod.object({
   "hasAttachments": zod.boolean().optional(),
   "attachmentParsed": zod.boolean().optional(),
   "attachmentType": zod.string().nullish(),
-  "syncedAt": zod.string()
+  "syncedAt": zod.string(),
+  "rfqId": zod.number().nullish().describe('ID of the linked rfq_record if one exists; null otherwise.')
 }).optional()
 })
 

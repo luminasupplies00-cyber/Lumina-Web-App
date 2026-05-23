@@ -20,7 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BackfillRfqsFromThreads200,
   ComparisonResponse,
+  CreateRfqFromThread200,
   CustomerQuoteParams,
   CustomerQuoteRevisionResponse,
   CustomerQuotesResponse,
@@ -1132,6 +1134,146 @@ export function useGetThreadCounts<TData = Awaited<ReturnType<typeof getThreadCo
 
 
 
+
+export const getCreateRfqFromThreadUrl = (id: number,) => {
+
+
+
+
+  return `/api/threads/${id}/create-rfq`
+}
+
+/**
+ * @summary Create an rfq_record from an email thread (idempotent)
+ */
+export const createRfqFromThread = async (id: number, options?: RequestInit): Promise<CreateRfqFromThread200> => {
+
+  return customFetch<CreateRfqFromThread200>(getCreateRfqFromThreadUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getCreateRfqFromThreadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRfqFromThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createRfqFromThread>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['createRfqFromThread'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRfqFromThread>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  createRfqFromThread(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateRfqFromThreadMutationResult = NonNullable<Awaited<ReturnType<typeof createRfqFromThread>>>
+
+    export type CreateRfqFromThreadMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create an rfq_record from an email thread (idempotent)
+ */
+export const useCreateRfqFromThread = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRfqFromThread>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createRfqFromThread>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getCreateRfqFromThreadMutationOptions(options));
+    }
+
+export const getBackfillRfqsFromThreadsUrl = () => {
+
+
+
+
+  return `/api/threads/backfill-rfqs`
+}
+
+/**
+ * @summary Create rfq_records for all RFQ-classified threads missing one
+ */
+export const backfillRfqsFromThreads = async ( options?: RequestInit): Promise<BackfillRfqsFromThreads200> => {
+
+  return customFetch<BackfillRfqsFromThreads200>(getBackfillRfqsFromThreadsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getBackfillRfqsFromThreadsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof backfillRfqsFromThreads>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof backfillRfqsFromThreads>>, TError,void, TContext> => {
+
+const mutationKey = ['backfillRfqsFromThreads'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof backfillRfqsFromThreads>>, void> = () => {
+
+
+          return  backfillRfqsFromThreads(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BackfillRfqsFromThreadsMutationResult = NonNullable<Awaited<ReturnType<typeof backfillRfqsFromThreads>>>
+
+    export type BackfillRfqsFromThreadsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create rfq_records for all RFQ-classified threads missing one
+ */
+export const useBackfillRfqsFromThreads = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof backfillRfqsFromThreads>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof backfillRfqsFromThreads>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getBackfillRfqsFromThreadsMutationOptions(options));
+    }
 
 export const getGetThreadUrl = (id: number,) => {
 

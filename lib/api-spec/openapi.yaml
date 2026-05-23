@@ -264,6 +264,54 @@ paths:
                     additionalProperties:
                       type: integer
 
+  /threads/{id}/create-rfq:
+    post:
+      operationId: createRfqFromThread
+      tags: [threads]
+      summary: Create an rfq_record from an email thread (idempotent)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: RFQ created or already existed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                  rfqId:
+                    type: integer
+                  created:
+                    type: boolean
+
+  /threads/backfill-rfqs:
+    post:
+      operationId: backfillRfqsFromThreads
+      tags: [threads]
+      summary: Create rfq_records for all RFQ-classified threads missing one
+      responses:
+        "200":
+          description: Backfill result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, created, scanned]
+                properties:
+                  ok:
+                    type: boolean
+                  created:
+                    type: integer
+                  scanned:
+                    type: integer
+
   /threads/{id}:
     get:
       operationId: getThread
@@ -1013,6 +1061,9 @@ components:
           type: ["string", "null"]
         syncedAt:
           type: string
+        rfqId:
+          type: ["integer", "null"]
+          description: ID of the linked rfq_record if one exists; null otherwise.
 
     ThreadsResponse:
       type: object

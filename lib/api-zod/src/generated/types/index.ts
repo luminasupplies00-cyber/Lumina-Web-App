@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './backfillRfqsFromThreads200';
 export * from './comparisonResponse';
 export * from './comparisonRow';
+export * from './createRfqFromThread200';
 export * from './customerQuoteParams';
 export * from './customerQuoteRecord';
 export * from './customerQuoteRevisionResponse';

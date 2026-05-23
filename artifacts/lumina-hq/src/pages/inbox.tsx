@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import {
   useGetThreads,
-  useCreateRfq,
+  useCreateRfqFromThread,
   useGetZohoAccounts,
   useGetThreadCounts,
   useRunSyncForAccount,
@@ -165,7 +165,7 @@ export default function Inbox() {
   if (activeTab !== "All") queryParams["accountId"] = activeTab;
 
   const { data, isLoading } = useGetThreads(queryParams);
-  const createRfq = useCreateRfq();
+  const createRfq = useCreateRfqFromThread();
   const reclassify = useReclassifyAll();
   const syncAll = useRunSync();
   const syncOne = useRunSyncForAccount();
@@ -179,23 +179,17 @@ export default function Inbox() {
     void queryClient.invalidateQueries({ queryKey: ["/api/auth/zoho/accounts"] });
   };
 
-  const handleMoveToPipeline = (thread: { id: number; senderName: string; senderEmail: string; subject: string }) => {
+  const handleMoveToPipeline = (thread: { id: number; subject: string }) => {
     createRfq.mutate(
+      { id: thread.id },
       {
-        data: {
-          emailThreadId: thread.id,
-          customerName: thread.senderName,
-          customerEmail: thread.senderEmail,
-          notes: thread.subject,
-        },
-      },
-      {
-        onSuccess: () => {
-          toast.success("Added to Pipeline");
+        onSuccess: (res) => {
+          const r = res as { created?: boolean };
+          toast.success(r.created ? "Created RFQ in Pipeline NEW" : "RFQ already existed for this thread");
           invalidateAll();
           void queryClient.invalidateQueries({ queryKey: ["/api/rfq"] });
         },
-        onError: () => toast.error("Failed to add to pipeline"),
+        onError: () => toast.error("Failed to create RFQ"),
       },
     );
   };
@@ -385,9 +379,16 @@ export default function Inbox() {
                       <ExternalLink className="h-3 w-3 mr-1" /> Zoho
                     </a>
                   </Button>
-                  {!thread.isRfq && thread.classification === "RFQ" && (
+                  {thread.classification === "RFQ" && !(thread as { rfqId?: number | null }).rfqId && (
                     <Button size="sm" onClick={() => handleMoveToPipeline(thread)} disabled={createRfq.isPending}>
-                      <ArrowRight className="h-3 w-3 mr-1" /> Pipeline
+                      <ArrowRight className="h-3 w-3 mr-1" /> Create RFQ
+                    </Button>
+                  )}
+                  {(thread as { rfqId?: number | null }).rfqId && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`/rfq/${(thread as { rfqId?: number }).rfqId}`}>
+                        <ArrowRight className="h-3 w-3 mr-1" /> Open RFQ
+                      </a>
                     </Button>
                   )}
                 </div>
