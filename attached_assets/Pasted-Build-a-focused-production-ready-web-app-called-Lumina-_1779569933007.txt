@@ -1,0 +1,516 @@
+Build a focused, production-ready web app called "Lumina HQ"
+for Lumina Supplies — a B2B laboratory and scientific supplies
+company in Riyadh, Saudi Arabia.
+
+I am the business owner. My single biggest daily bottleneck is
+processing RFQ emails (Requests for Quotation) from hospitals,
+labs, and research institutions.
+
+My current manual process per RFQ:
+1. Open email in Zoho Mail
+2. Read and understand what products are needed
+3. Extract the product list manually
+4. Email suppliers to get pricing
+5. Wait for supplier replies
+6. Compare supplier prices manually
+7. Calculate selling price with markup
+8. Write and send customer quotation email
+9. Follow up if no customer response after a few days
+
+This takes 30-60 minutes per RFQ.
+I receive multiple RFQs per day.
+Goal: reduce this to under 10 minutes per RFQ.
+
+---
+
+## PHASE 1 ONLY
+
+Build only the RFQ workflow in Phase 1.
+Nothing else.
+No generic dashboard.
+No fake data.
+No placeholder pages.
+
+The app has two parts:
+1. Zoho Mail connection (to read real RFQ emails)
+2. RFQ Pipeline (to manage each RFQ through stages)
+
+---
+
+## STACK
+
+Choose the best Replit-friendly production stack.
+Recommended:
+- Next.js 14 (App Router)
+- TypeScript strict
+- Tailwind CSS
+- Prisma ORM
+- PostgreSQL (Replit DB or Supabase)
+- Perplexity sonar-pro as AI brain
+- Dark mode only
+
+---
+
+## PART 1: ZOHO MAIL CONNECTION
+
+Implement real Zoho Mail OAuth 2.0 — no mock emails.
+
+OAuth flow:
+- Register as Server-Based Application in Zoho API Console
+- Authorize at: {accounts_domain}/oauth/v2/auth
+- Callback route: /api/auth/zoho/callback
+- Exchange code for access_token + refresh_token
+- Store tokens encrypted in DB
+- Auto-refresh when token expires
+
+Config fields (in Settings/Integrations page):
+- ZOHO_CLIENT_ID
+- ZOHO_CLIENT_SECRET
+- ZOHO_REDIRECT_URI
+- ZOHO_ACCOUNTS_DOMAIN (default: accounts.zoho.com)
+
+After connection:
+- Fetch Zoho Mail account ID
+- Sync inbox threads
+- Run AI triage on each thread
+
+Authorization header for all Zoho Mail API calls:
+Authorization: Zoho-oauthtoken {access_token}
+NOT Bearer.
+
+---
+
+## PART 2: AI EMAIL TRIAGE
+
+On every sync, classify each email thread using
+Perplexity sonar-pro.
+
+Classify as one of:
+- RFQ (customer requesting quotation)
+- Supplier Reply (supplier responding to our inquiry)
+- Customer Follow-up (customer asking about sent quote)
+- PO / Invoice (purchase order or invoice related)
+- Internal
+- Spam / Newsletter
+- General
+
+For RFQ emails, also extract:
+- customer name
+- customer company
+- products mentioned (name, cat no, brand, quantity)
+- any deadline mentioned
+- urgency signals
+
+Auto-create an RFQ record for every email classified as RFQ.
+
+Show classification badge on every email in the inbox view.
+
+---
+
+## PART 3: RFQ PIPELINE PAGE
+
+Main page of the app at /rfq
+
+Show RFQ records grouped by stage in a vertical list.
+
+Stages:
+1. NEW — received, not yet processed
+2. SOURCING — sent to suppliers, awaiting quotes
+3. COMPARING — supplier quotes received
+4. QUOTE READY — customer quote prepared
+5. QUOTE SENT — awaiting customer response
+6. FOLLOW UP — no response after 3+ days
+7. WON
+8. LOST / NO RESPONSE
+
+Each RFQ card shows:
+- customer name + company
+- email subject
+- date received
+- days in current stage (red if > 2 days)
+- number of products
+- estimated value (SAR) if known
+- AI suggested next action (one line)
+- stage badge
+- action buttons (stage-specific)
+
+---
+
+## PART 4: AI PRODUCT EXTRACTION
+
+Button: "Extract Products" on NEW stage cards.
+
+Call Perplexity sonar-pro with email body.
+Extract structured product list:
+
+Per product:
+- product_name
+- catalogue_number (if mentioned)
+- brand (if mentioned)
+- quantity
+- specifications
+
+Return as JSON.
+Show in expandable product table on the card.
+Store in rfq_products table.
+
+If extraction fails:
+- Show clean error message
+- Show "Open in Zoho Mail" link
+
+max_tokens: 800
+
+---
+
+## PART 5: SUPPLIER EMAIL DRAFT
+
+Button: "Draft Supplier Email" on NEW or SOURCING cards.
+
+Show modal with:
+- To: field (editable)
+- Subject: pre-filled (editable)
+- Body: AI-generated professional email
+
+Email structure:
+- Intro: brief context about client inquiry
+- Product table: Product | Cat No | Brand | Qty | Specs
+- Request: unit price, lead time, MOQ, validity
+- Professional closing with Lumina Supplies
+
+Buttons in modal:
+- Copy (copies full email to clipboard)
+- Open Zoho Mail (opens compose in new tab)
+- Close
+
+NEVER auto-send.
+Store draft in ai_drafts table.
+
+max_tokens: 600
+
+---
+
+## PART 6: SUPPLIER QUOTE LOGGING
+
+Button: "Log Supplier Quote" on SOURCING cards.
+
+Form:
+- Supplier name
+- Supplier email
+- Per product line:
+  - Unit price
+  - Currency (SAR / USD / EUR)
+  - Lead time (days)
+  - MOQ
+  - Notes
+- Add product row button
+- Save button
+
+Store in rfq_supplier_quotes and rfq_supplier_quote_lines.
+When saved, move RFQ to COMPARING stage.
+
+---
+
+## PART 7: QUOTE COMPARISON TABLE
+
+Shown on COMPARING stage cards when expanded.
+
+Table layout:
+- Rows: products
+- Columns: suppliers
+- Each cell: price + lead time
+
+Below table:
+- AI recommendation: best supplier + reasoning
+- Markup % field (default 30%, editable)
+- Calculated customer price per product
+- Total quote value (SAR)
+
+Button: "Generate Customer Quote Draft"
+
+max_tokens for AI recommendation: 400
+
+---
+
+## PART 8: CUSTOMER QUOTE DRAFT
+
+Modal shown when "Generate Customer Quote Draft" clicked.
+
+Professional quotation email:
+- Greeting with customer name
+- Products table:
+  # | Description | Cat No | Brand | Qty | Unit Price | Total
+- Payment terms (Net 30 or configurable)
+- Delivery time
+- Quote validity (30 days default)
+- Professional Lumina Supplies closing
+
+Editable textarea.
+Copy button.
+Open Zoho Mail button.
+NEVER auto-send.
+
+Move RFQ to QUOTE READY stage.
+Store in ai_drafts.
+
+max_tokens: 800
+
+---
+
+## PART 9: FOLLOW-UP DRAFT
+
+Auto-flag QUOTE SENT cards after 3 days with no response.
+Show: "Follow-up recommended — X days since quote sent"
+
+Button: "Draft Follow-up"
+
+Short professional email:
+- References original quote
+- Asks if customer needs clarification
+- Polite and professional tone
+
+Editable. Copy button.
+
+max_tokens: 300
+
+---
+
+## PART 10: METRICS STRIP
+
+Top of RFQ Pipeline page.
+
+Show:
+- New RFQs today
+- In sourcing
+- Awaiting customer
+- Won this month
+- Total pipeline value (SAR)
+- Average days to close
+
+---
+
+## PART 11: INBOX VIEW
+
+Secondary page at /inbox
+
+Show all synced Zoho Mail threads.
+Each row shows:
+- Classification badge (RFQ / Supplier Reply / etc.)
+- Sender name and email
+- Subject
+- Received time
+- "Open in Zoho Mail" deep link
+- "Move to RFQ Pipeline" button (for RFQ emails)
+
+Filter by classification.
+Search by sender or subject.
+
+---
+
+## PART 12: SETTINGS / INTEGRATIONS PAGE
+
+At /settings
+
+Zoho Mail section:
+- Client ID input
+- Client Secret input
+- Redirect URI (auto-populated from app URL)
+- Accounts Domain input (default: accounts.zoho.com)
+- Connect button → starts OAuth flow
+- Connection status badge
+- Last synced time
+- Sync Now button
+- Disconnect button
+
+AI section:
+- Perplexity API key input
+- Model selector (sonar / sonar-pro / sonar-reasoning)
+- Default: sonar-pro
+
+---
+
+## DATABASE SCHEMA
+
+Create these tables with Prisma:
+
+ZohoConnection {
+  id
+  accountId
+  email
+  accessToken (encrypted)
+  refreshToken (encrypted)
+  tokenExpiry
+  accountsDomain
+  connectedAt
+  lastSyncedAt
+}
+
+EmailThread {
+  id
+  threadId (Zoho thread ID)
+  subject
+  senderName
+  senderEmail
+  receivedAt
+  snippet
+  classification
+  isRfq
+  syncedAt
+}
+
+RfqRecord {
+  id
+  emailThreadId
+  customerName
+  customerCompany
+  customerEmail
+  stage
+  estimatedValue
+  currency
+  assignedTo
+  notes
+  stageUpdatedAt
+  createdAt
+  updatedAt
+}
+
+RfqProduct {
+  id
+  rfqId
+  productName
+  catalogueNumber
+  brand
+  quantity
+  specifications
+  notes
+}
+
+RfqSupplierQuote {
+  id
+  rfqId
+  supplierName
+  supplierEmail
+  quotedAt
+  notes
+}
+
+RfqSupplierQuoteLine {
+  id
+  quoteId
+  rfqProductId
+  unitPrice
+  currency
+  leadTimeDays
+  moq
+  notes
+}
+
+RfqCustomerQuote {
+  id
+  rfqId
+  markupPercent
+  totalValue
+  currency
+  validityDays
+  sentAt
+  createdAt
+}
+
+AiDraft {
+  id
+  rfqId
+  draftType
+  content
+  modelUsed
+  generatedAt
+  copiedAt
+}
+
+AppSettings {
+  id
+  key
+  value (encrypted for sensitive values)
+  updatedAt
+}
+
+---
+
+## NAVIGATION
+
+Simple sidebar with:
+- RFQ Pipeline (main page, default route)
+- Inbox
+- Settings
+
+Header shows:
+- App name: Lumina HQ
+- Last synced time
+- Sync Now button
+- Connection status dot
+
+---
+
+## DESIGN
+
+- Dark mode only
+- Professional, clean, executive feel
+- No startup gradients or decorative animations
+- Neutral dark background (#0f1117 or similar)
+- Accent: cyan or amber for badges and CTAs
+- Dense but readable
+- Sidebar navigation
+- Modals for all AI actions
+- Loading spinners on all async operations
+- Empty states that honestly describe what is missing
+
+---
+
+## ABSOLUTE RULES
+
+1. Zero mock data — empty states only
+2. Never auto-send emails or auto-post anywhere
+3. All AI drafts in modal only — user must copy manually
+4. All credentials encrypted in DB
+5. TypeScript strict — zero errors
+6. Every AI call has max_tokens set correctly
+   (never below 16 for sonar-pro)
+7. All AI responses validated before rendering
+8. Zoho API calls use:
+   Authorization: Zoho-oauthtoken {token}
+   NOT Bearer
+9. Tests for: OAuth flow, AI parsing, stage transitions
+
+---
+
+## BEFORE CODING
+
+Show me:
+1. Chosen stack and why
+2. Complete Prisma schema
+3. All API routes
+4. AI prompt templates for each feature
+5. Page component structure
+6. Implementation order
+
+Get my confirmation before writing any code.
+
+---
+
+## DONE MEANS
+
+Phase 1 is complete only when ALL of these work
+with real Zoho Mail data:
+
+1. Zoho Mail OAuth connects successfully
+2. Real emails sync and appear in Inbox view
+3. RFQ emails are automatically detected and classified
+4. Detected RFQs appear in RFQ Pipeline as NEW cards
+5. "Extract Products" works and shows real product table
+6. "Draft Supplier Email" generates a ready-to-copy email
+7. Supplier quote can be logged with prices
+8. Comparison table shows across suppliers
+9. Customer quote draft generates correctly
+10. RFQ moves through all stages manually
+11. Metrics strip shows correct live counts
+
+Do not mark Phase 1 done until all 11 work.
+Do not start Phase 2 until I confirm Phase 1 is working.
