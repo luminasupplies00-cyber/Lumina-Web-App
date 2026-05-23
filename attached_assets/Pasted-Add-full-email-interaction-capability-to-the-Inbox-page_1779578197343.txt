@@ -1,0 +1,220 @@
+Add full email interaction capability to the Inbox page.
+
+Currently emails are just rows with no way to open, read,
+reply, archive, or act on them.
+
+I need full email actions without leaving Lumina HQ.
+
+---
+
+## FEATURE: EMAIL DETAIL PANEL
+
+When clicking any email row in the Inbox, open a
+slide-over panel from the right side (not a new page).
+
+The panel should show:
+
+HEADER:
+- Subject (full, not truncated)
+- From: sender name + email address
+- To: recipient
+- Date and time received
+- Classification badge
+- Confidence badge if low confidence
+- Account badge (Owner / Sales / Procurement)
+
+BODY:
+- Full email body rendered as HTML if HTML email
+- Plain text fallback if no HTML
+- Inline images if present
+- Attachments listed below body:
+  - Filename
+  - File size
+  - Type icon (PDF, Excel, Word, Image)
+  - "Download" button per attachment
+
+THREAD VIEW:
+- If thread has multiple messages, show all messages
+  in conversation order (oldest first, newest last)
+- Each message collapsible
+- Latest message expanded by default
+- Show "X messages in this thread" count
+
+---
+
+## FEATURE: EMAIL ACTIONS TOOLBAR
+
+Inside the email panel, show an action toolbar with:
+
+1. REPLY
+   - Opens a compose modal within Lumina HQ
+   - Pre-fills: To (original sender), Subject (Re: ...)
+   - Shows quoted original email below compose area
+   - Send button → sends via Zoho Mail API
+   - Requires ZohoMail.messages.CREATE scope
+
+2. REPLY ALL
+   - Same as Reply but pre-fills all recipients
+
+3. FORWARD
+   - Opens compose modal
+   - Pre-fills: Subject (Fwd: ...)
+   - Shows original email as forwarded content
+   - To: field empty for user to fill
+
+4. ARCHIVE
+   - Moves email to Archive folder in Zoho Mail
+   - Removes from Inbox view in Lumina HQ
+   - Shows undo option for 5 seconds
+
+5. MARK AS READ / UNREAD
+   - Toggles read state in Zoho Mail
+   - Updates badge count in account tab
+
+6. MOVE TO RFQ PIPELINE
+   - Only shown if email is classified as RFQ
+   - Creates rfq_record if not already exists
+   - Shows confirmation: "Added to RFQ Pipeline"
+   - Shows link to open in Pipeline
+
+7. SNOOZE
+   - Dropdown: 1 hour / 3 hours / Tomorrow morning /
+     Custom date
+   - Hides email from inbox until selected time
+   - Shows snoozed count badge in header
+
+8. DELETE
+   - Moves to Trash in Zoho Mail
+   - Requires confirmation dialog
+   - "Are you sure? This will move to Trash."
+
+9. ASSIGN TO
+   - Dropdown: Eman Ali / Asha Maru / Sales Team / Self
+   - Logs delegation in local DB
+   - Shows assigned badge on email row
+
+10. AI: SUMMARIZE
+    - One click
+    - Claude reads full thread and returns:
+      - 2-3 sentence summary
+      - Key action required
+      - Any deadlines mentioned
+    - Shows in a highlighted box above email body
+    - max_tokens: 200
+
+11. AI: DRAFT REPLY
+    - Context-aware reply draft based on:
+      - Email classification (RFQ / Supplier / Follow-up)
+      - Full thread content
+      - Customer/supplier name
+    - Shows in editable textarea in compose modal
+    - User edits then sends manually
+    - For RFQ: acknowledges receipt, says we are
+      checking availability and will revert shortly
+    - For Supplier Reply: professional acknowledgment
+    - For Customer Follow-up: status update draft
+
+---
+
+## FEATURE: COMPOSE MODAL
+
+When Reply / Reply All / Forward is clicked:
+
+Show a compose modal with:
+- To: field (pre-filled, editable, supports multiple)
+- CC: field (collapsed by default, expandable)
+- Subject: field (pre-filled, editable)
+- Body: rich text area (or plain text with formatting)
+- Quoted email below (collapsible)
+- Attach file button (uploads via Zoho Mail API)
+- Send button → calls Zoho Mail send API
+- Save Draft button → saves to Zoho Drafts folder
+- Cancel button with confirmation if body has content
+
+Sending uses:
+POST https://mail.zoho.com/api/accounts/{accountId}/messages
+Authorization: Zoho-oauthtoken {access_token}
+
+---
+
+## ZOHO MAIL API SCOPE REQUIREMENTS
+
+Check that these OAuth scopes are requested during 
+connection:
+- ZohoMail.messages.ALL (read + send + delete)
+- ZohoMail.folders.ALL (archive, move)
+- ZohoMail.accounts.READ (account info)
+
+If current scope is missing send/delete/folder access,
+update the OAuth authorization URL to include full scopes
+and show a "Reconnect to enable full email actions" banner
+if current token has insufficient scope.
+
+---
+
+## ZOHO MAIL API CALLS TO IMPLEMENT
+
+Read full message:
+GET /api/accounts/{accountId}/messages/{messageId}
+
+List thread messages:
+GET /api/accounts/{accountId}/threads/{threadId}/messages
+
+Send email:
+POST /api/accounts/{accountId}/messages
+Body: { toAddress, subject, content, mailFormat: "html" }
+
+Mark read/unread:
+PUT /api/accounts/{accountId}/updatemessage
+Body: { messageId, isRead: true/false }
+
+Move to folder (archive/trash):
+PUT /api/accounts/{accountId}/updatemessage  
+Body: { messageId, folderId: {archive_folder_id} }
+
+---
+
+## UX REQUIREMENTS
+
+- Slide-over panel opens without losing inbox list context
+- Panel width: 50% of screen on desktop, full screen on mobile
+- Close button top right (X)
+- Keyboard shortcut: Escape to close
+- Loading skeleton while fetching full email content
+- Error state if email fetch fails with retry button
+- Mark as read automatically when email panel opens
+- Smooth open/close animation
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Add Zoho Mail API scope check and reconnect banner
+2. Build email detail slide-over panel with full body
+3. Add thread view (all messages in conversation)
+4. Add attachment listing
+5. Add Mark Read/Unread action
+6. Add Archive action
+7. Add Delete action (with confirmation)
+8. Add Move to RFQ Pipeline action
+9. Add Assign To action
+10. Add AI Summarize action
+11. Add AI Draft Reply action
+12. Build compose modal (Reply/Reply All/Forward)
+13. Wire up Send via Zoho Mail API
+14. Add Snooze functionality
+15. Test all actions with real emails
+
+---
+
+## DONE MEANS
+
+When complete I must be able to:
+1. Click any email and read the full content
+2. See all messages in a thread conversation view
+3. Reply to an email and have it actually send via Zoho
+4. Archive an email and have it move in Zoho Mail
+5. Get an AI summary of any thread in one click
+6. Get an AI draft reply in one click
+7. Move an RFQ email to the pipeline in one click
+8. Assign any email to Eman, Asha, or Sales in one click
