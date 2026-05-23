@@ -75,5 +75,6 @@ export * from './syncStatus';
 export * from './threadResponse';
 export * from './threadsResponse';
 export * from './zohoAccount';
+export * from './zohoAccountLabelUpdate';
 export * from './zohoAuthUrl';
 export * from './zohoStatus';

@@ -222,6 +222,31 @@ router.get("/auth/zoho/accounts", async (req, res) => {
   }
 });
 
+// PATCH /auth/zoho/accounts/:id — update account label (role)
+router.patch("/auth/zoho/accounts/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params["id"] ?? "0");
+    const { accountLabel } = req.body as { accountLabel?: string };
+    if (!accountLabel || typeof accountLabel !== "string") {
+      res.status(400).json({ error: "accountLabel is required" });
+      return;
+    }
+    const allowed = ["Owner", "Sales", "Procurement", "Support", "Finance", "General"];
+    if (!allowed.includes(accountLabel)) {
+      res.status(400).json({ error: `accountLabel must be one of: ${allowed.join(", ")}` });
+      return;
+    }
+    await db
+      .update(zohoConnectionsTable)
+      .set({ accountLabel })
+      .where(eq(zohoConnectionsTable.id, id));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update Zoho account label");
+    res.status(500).json({ error: "Failed to update account label" });
+  }
+});
+
 // DELETE /auth/zoho/accounts/:id — disconnect a specific account
 router.delete("/auth/zoho/accounts/:id", async (req, res) => {
   try {

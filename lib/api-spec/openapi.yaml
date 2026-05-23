@@ -117,6 +117,29 @@ paths:
                       $ref: "#/components/schemas/ZohoAccount"
 
   /auth/zoho/accounts/{id}:
+    patch:
+      operationId: updateZohoAccountLabel
+      tags: [zoho]
+      summary: Update the role label of a connected Zoho account
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ZohoAccountLabelUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
     delete:
       operationId: disconnectZohoAccount
       tags: [zoho]
@@ -866,6 +889,14 @@ components:
       properties:
         authUrl:
           type: string
+
+    ZohoAccountLabelUpdate:
+      type: object
+      required: [accountLabel]
+      properties:
+        accountLabel:
+          type: string
+          description: "One of: Owner, Sales, Procurement, Support, Finance, General"
 
     ZohoAccount:
       type: object

@@ -63,6 +63,7 @@ import type {
   SyncStatus,
   ThreadResponse,
   ThreadsResponse,
+  ZohoAccountLabelUpdate,
   ZohoAuthUrl,
   ZohoStatus
 } from './api.schemas';
@@ -541,6 +542,78 @@ export function useGetZohoAccounts<TData = Awaited<ReturnType<typeof getZohoAcco
 
 
 
+
+export const getUpdateZohoAccountLabelUrl = (id: number,) => {
+
+
+
+
+  return `/api/auth/zoho/accounts/${id}`
+}
+
+/**
+ * @summary Update the role label of a connected Zoho account
+ */
+export const updateZohoAccountLabel = async (id: number,
+    zohoAccountLabelUpdate: ZohoAccountLabelUpdate, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getUpdateZohoAccountLabelUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      zohoAccountLabelUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateZohoAccountLabelMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateZohoAccountLabel>>, TError,{id: number;data: BodyType<ZohoAccountLabelUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateZohoAccountLabel>>, TError,{id: number;data: BodyType<ZohoAccountLabelUpdate>}, TContext> => {
+
+const mutationKey = ['updateZohoAccountLabel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateZohoAccountLabel>>, {id: number;data: BodyType<ZohoAccountLabelUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateZohoAccountLabel(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateZohoAccountLabelMutationResult = NonNullable<Awaited<ReturnType<typeof updateZohoAccountLabel>>>
+    export type UpdateZohoAccountLabelMutationBody = BodyType<ZohoAccountLabelUpdate>
+    export type UpdateZohoAccountLabelMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update the role label of a connected Zoho account
+ */
+export const useUpdateZohoAccountLabel = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateZohoAccountLabel>>, TError,{id: number;data: BodyType<ZohoAccountLabelUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateZohoAccountLabel>>,
+        TError,
+        {id: number;data: BodyType<ZohoAccountLabelUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateZohoAccountLabelMutationOptions(options));
+    }
 
 export const getDisconnectZohoAccountUrl = (id: number,) => {
 

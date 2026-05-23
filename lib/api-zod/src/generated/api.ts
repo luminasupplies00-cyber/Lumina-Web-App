@@ -79,6 +79,22 @@ export const GetZohoAccountsResponse = zod.object({
 
 
 /**
+ * @summary Update the role label of a connected Zoho account
+ */
+export const UpdateZohoAccountLabelParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateZohoAccountLabelBody = zod.object({
+  "accountLabel": zod.string().describe('One of: Owner, Sales, Procurement, Support, Finance, General')
+})
+
+export const UpdateZohoAccountLabelResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Disconnect a specific Zoho account
  */
 export const DisconnectZohoAccountParams = zod.object({

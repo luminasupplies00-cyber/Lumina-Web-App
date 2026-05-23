@@ -25,6 +25,11 @@ export interface ZohoAuthUrl {
   authUrl: string;
 }
 
+export interface ZohoAccountLabelUpdate {
+  /** One of: Owner, Sales, Procurement, Support, Finance, General */
+  accountLabel: string;
+}
+
 export interface ZohoAccount {
   id: number;
   accountId: string;

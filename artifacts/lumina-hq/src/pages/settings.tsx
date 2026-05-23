@@ -7,6 +7,7 @@ import {
   useGetZohoAuthUrl,
   useGetZohoAccounts,
   useDisconnectZohoAccount,
+  useUpdateZohoAccountLabel,
   useDisconnectZoho,
   useRunSync,
 } from "@workspace/api-client-react";
@@ -158,6 +159,11 @@ function ZohoAccountsCard() {
                   account={account}
                   onDisconnect={() => handleDisconnect(account.id, account.email)}
                   disconnecting={disconnect.isPending}
+                  onLabelChanged={() => {
+                    refetch();
+                    queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/threads/counts"] });
+                  }}
                 />
               ))}
             </div>
@@ -221,11 +227,14 @@ function AccountRow({
   account,
   onDisconnect,
   disconnecting,
+  onLabelChanged,
 }: {
   account: any;
   onDisconnect: () => void;
   disconnecting: boolean;
+  onLabelChanged: () => void;
 }) {
+  const updateLabel = useUpdateZohoAccountLabel();
   const label = (account.accountLabel || "General") as AccountLabel;
   const labelClass = LABEL_COLORS[label] || LABEL_COLORS.General;
 
@@ -239,6 +248,20 @@ function AccountRow({
     : "Never";
 
   const tokenExpired = account.tokenExpiry ? new Date(account.tokenExpiry) < new Date() : false;
+
+  const handleChangeLabel = (newLabel: string) => {
+    if (newLabel === label) return;
+    updateLabel.mutate(
+      { id: account.id, data: { accountLabel: newLabel } },
+      {
+        onSuccess: () => {
+          toast.success(`Role updated to ${newLabel}`);
+          onLabelChanged();
+        },
+        onError: () => toast.error("Failed to update role"),
+      },
+    );
+  };
 
   return (
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-muted/20">
@@ -267,15 +290,29 @@ function AccountRow({
           </div>
         </div>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-        onClick={onDisconnect}
-        disabled={disconnecting}
-      >
-        <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove
-      </Button>
+      <div className="flex items-center gap-2 shrink-0">
+        <Select value={label} onValueChange={handleChangeLabel} disabled={updateLabel.isPending}>
+          <SelectTrigger className="h-7 w-32 text-xs">
+            <SelectValue placeholder="Role" />
+          </SelectTrigger>
+          <SelectContent>
+            {ACCOUNT_LABELS.map((l) => (
+              <SelectItem key={l} value={l} className="text-xs">
+                {l}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          onClick={onDisconnect}
+          disabled={disconnecting}
+        >
+          <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove
+        </Button>
+      </div>
     </div>
   );
 }
