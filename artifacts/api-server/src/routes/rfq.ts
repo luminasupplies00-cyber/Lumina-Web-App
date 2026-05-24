@@ -42,7 +42,13 @@ router.get("/rfq", async (req, res) => {
 
         const thread = rfq.emailThreadId
           ? await db
-              .select({ subject: emailThreadsTable.subject, threadId: emailThreadsTable.threadId })
+              .select({
+                id: emailThreadsTable.id,
+                subject: emailThreadsTable.subject,
+                threadId: emailThreadsTable.threadId,
+                hasAttachments: emailThreadsTable.hasAttachments,
+                attachments: emailThreadsTable.attachments,
+              })
               .from(emailThreadsTable)
               .where(eq(emailThreadsTable.id, rfq.emailThreadId))
               .limit(1)
@@ -56,6 +62,9 @@ router.get("/rfq", async (req, res) => {
           products,
           emailSubject: thread[0]?.subject ?? null,
           zohoThreadId: thread[0]?.threadId ?? null,
+          threadDbId: thread[0]?.id ?? null,
+          hasAttachments: thread[0]?.hasAttachments ?? false,
+          attachments: thread[0]?.attachments ?? [],
         };
       }),
     );

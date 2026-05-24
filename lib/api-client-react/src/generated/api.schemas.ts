@@ -259,6 +259,10 @@ export interface RfqRecord {
   emailSubject?: string | null;
   /** @nullable */
   zohoThreadId?: string | null;
+  /** @nullable */
+  threadDbId?: number | null;
+  hasAttachments?: boolean;
+  attachments?: EmailAttachment[];
 }
 
 export interface RfqProduct {

@@ -1466,6 +1466,14 @@ components:
           type: ["string", "null"]
         zohoThreadId:
           type: ["string", "null"]
+        threadDbId:
+          type: ["integer", "null"]
+        hasAttachments:
+          type: boolean
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAttachment"
 
     RfqProduct:
       type: object

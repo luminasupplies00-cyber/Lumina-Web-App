@@ -5,6 +5,7 @@
  * Lumina HQ API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { EmailAttachment } from './emailAttachment';
 
 export interface RfqRecord {
   id: number;
@@ -52,4 +53,8 @@ export interface RfqRecord {
   emailSubject?: string | null;
   /** @nullable */
   zohoThreadId?: string | null;
+  /** @nullable */
+  threadDbId?: number | null;
+  hasAttachments?: boolean;
+  attachments?: EmailAttachment[];
 }

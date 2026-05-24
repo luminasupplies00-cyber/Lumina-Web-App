@@ -481,7 +481,15 @@ export const GetRfqsResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "emailSubject": zod.string().nullish(),
-  "zohoThreadId": zod.string().nullish()
+  "zohoThreadId": zod.string().nullish(),
+  "threadDbId": zod.number().nullish(),
+  "hasAttachments": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
 }).and(zod.object({
   "products": zod.array(zod.object({
   "id": zod.number(),
@@ -556,7 +564,15 @@ export const GetRfqResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "emailSubject": zod.string().nullish(),
-  "zohoThreadId": zod.string().nullish()
+  "zohoThreadId": zod.string().nullish(),
+  "threadDbId": zod.number().nullish(),
+  "hasAttachments": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
 }),
   "products": zod.array(zod.object({
   "id": zod.number(),
@@ -664,7 +680,15 @@ export const UpdateRfqResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "emailSubject": zod.string().nullish(),
-  "zohoThreadId": zod.string().nullish()
+  "zohoThreadId": zod.string().nullish(),
+  "threadDbId": zod.number().nullish(),
+  "hasAttachments": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
 })
 })
 
@@ -709,7 +733,15 @@ export const UpdateRfqStageResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "emailSubject": zod.string().nullish(),
-  "zohoThreadId": zod.string().nullish()
+  "zohoThreadId": zod.string().nullish(),
+  "threadDbId": zod.number().nullish(),
+  "hasAttachments": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
 })
 })
 
@@ -775,7 +807,15 @@ export const ConfirmExtractionResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "emailSubject": zod.string().nullish(),
-  "zohoThreadId": zod.string().nullish()
+  "zohoThreadId": zod.string().nullish(),
+  "threadDbId": zod.number().nullish(),
+  "hasAttachments": zod.boolean().optional(),
+  "attachments": zod.array(zod.object({
+  "attachmentId": zod.string(),
+  "name": zod.string(),
+  "size": zod.number().nullish(),
+  "type": zod.string().nullish()
+})).optional()
 })
 })
 

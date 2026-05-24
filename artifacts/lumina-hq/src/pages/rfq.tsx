@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
@@ -28,7 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ExternalLink, Copy, Check, ChevronRight, FileText, Bot, Plus, Trash2,
   BarChart2, MessageSquare, User, RefreshCw, AlertTriangle, ClipboardPaste,
-  Edit3, CheckCircle2
+  Edit3, CheckCircle2, Paperclip, Eye, Download
 } from "lucide-react";
 
 const STAGES = ["NEW", "SOURCING", "COMPARING", "QUOTE_READY", "QUOTE_SENT", "FOLLOW_UP", "WON", "LOST"];
@@ -103,6 +104,85 @@ interface ModalState {
   type: ModalType;
   rfqId: number;
   data?: any;
+}
+
+function RfqAttachmentsPopover({
+  threadId,
+  attachments,
+}: {
+  threadId: number;
+  attachments: Array<{ attachmentId: string; name: string; size?: number | null; type?: string | null }>;
+}) {
+  if (!attachments || attachments.length === 0) {
+    // Server signals hasAttachments=true but list isn't materialized yet
+    return (
+      <Paperclip
+        className="w-3 h-3 text-muted-foreground"
+        aria-label="Has attachments"
+      />
+    );
+  }
+  return (
+    <Popover>
+      <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-primary transition-colors p-0.5 -m-0.5 rounded"
+          aria-label={`${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`}
+          title={`${attachments.length} attachment${attachments.length === 1 ? "" : "s"}`}
+        >
+          <Paperclip className="w-3.5 h-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-72 p-2"
+        align="end"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-[11px] font-medium text-muted-foreground px-1 pb-1.5">
+          Attachments ({attachments.length})
+        </div>
+        <div className="flex flex-col gap-1">
+          {attachments.map((att) => {
+            const base = `/api/threads/${threadId}/attachments/${att.attachmentId}`;
+            return (
+              <div
+                key={att.attachmentId}
+                className="flex items-center gap-1.5 bg-muted/30 hover:bg-muted/50 rounded px-2 py-1.5"
+              >
+                <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" />
+                <span
+                  className="text-[11px] truncate flex-1"
+                  title={att.name}
+                >
+                  {att.name}
+                </span>
+                <a
+                  href={`${base}?inline=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-primary p-1 rounded"
+                  aria-label={`View ${att.name}`}
+                  title="View"
+                >
+                  <Eye className="w-3 h-3" />
+                </a>
+                <a
+                  href={base}
+                  download={att.name}
+                  className="text-muted-foreground hover:text-primary p-1 rounded"
+                  aria-label={`Download ${att.name}`}
+                  title="Download"
+                >
+                  <Download className="w-3 h-3" />
+                </a>
+              </div>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function RfqCard({ rfq }: { rfq: any }) {
@@ -193,15 +273,23 @@ function RfqCard({ rfq }: { rfq: any }) {
         )}
 
         <div className="flex justify-between items-start gap-2">
-          <div className="font-semibold text-sm truncate text-card-foreground leading-tight">
+          <div className="font-semibold text-sm truncate text-card-foreground leading-tight flex-1 min-w-0">
             {rfq.customerCompany || rfq.customerName || "Unknown"}
           </div>
-          <Badge
-            variant={rfq.isStuck ? "default" : daysInStage > 2 ? "destructive" : "secondary"}
-            className={`text-[9px] px-1 py-0 h-4 rounded-sm shrink-0 ${rfq.isStuck ? "bg-amber-500/20 text-amber-500 border-amber-500/30" : ""}`}
-          >
-            {daysInStage}d
-          </Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            {rfq.hasAttachments && rfq.threadDbId && (
+              <RfqAttachmentsPopover
+                threadId={rfq.threadDbId}
+                attachments={rfq.attachments || []}
+              />
+            )}
+            <Badge
+              variant={rfq.isStuck ? "default" : daysInStage > 2 ? "destructive" : "secondary"}
+              className={`text-[9px] px-1 py-0 h-4 rounded-sm ${rfq.isStuck ? "bg-amber-500/20 text-amber-500 border-amber-500/30" : ""}`}
+            >
+              {daysInStage}d
+            </Badge>
+          </div>
         </div>
 
         <div className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
