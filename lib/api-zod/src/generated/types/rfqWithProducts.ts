@@ -7,7 +7,11 @@
  */
 import type { RfqProduct } from './rfqProduct';
 import type { RfqRecord } from './rfqRecord';
+import type { SupplierContactRecord } from './supplierContactRecord';
 
 export type RfqWithProducts = RfqRecord & {
   products: RfqProduct[];
+  supplierContacts?: SupplierContactRecord[];
+  /** Number of CONTACTED contacts with no response > 48h */
+  noResponseCount?: number;
 };

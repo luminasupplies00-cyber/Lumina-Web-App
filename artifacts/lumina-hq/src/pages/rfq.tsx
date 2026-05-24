@@ -30,8 +30,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ExternalLink, Copy, Check, ChevronRight, FileText, Bot, Plus, Trash2,
   BarChart2, MessageSquare, User, RefreshCw, AlertTriangle, ClipboardPaste,
-  Edit3, CheckCircle2, Paperclip, Eye, Download
+  Edit3, CheckCircle2, Paperclip, Eye, Download, Globe, Mail, Clock, XCircle
 } from "lucide-react";
+import { SupplierOutreachModal } from "@/components/SupplierOutreachModal";
+import { FindSuppliersOnlineModal } from "@/components/FindSuppliersOnlineModal";
+import { useUpdateSupplierContactStatus, useDraftSupplierFollowup } from "@workspace/api-client-react";
 
 const STAGES = ["NEW", "SOURCING", "COMPARING", "QUOTE_READY", "QUOTE_SENT", "FOLLOW_UP", "WON", "LOST"];
 
@@ -112,7 +115,7 @@ function MetricCard({ label, value, alert }: { label: string; value: string | nu
   );
 }
 
-type ModalType = "supplier-draft" | "supplier-quote-form" | "comparison" | "customer-quote" | "followup" | "extraction-review";
+type ModalType = "supplier-outreach" | "find-online" | "supplier-followup" | "supplier-quote-form" | "comparison" | "customer-quote" | "followup" | "extraction-review";
 
 interface ModalState {
   type: ModalType;
@@ -247,15 +250,14 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
     );
   };
 
-  const handleDraftSupplier = (e: React.MouseEvent) => {
+  const handleSourceSuppliers = (e: React.MouseEvent) => {
     e.stopPropagation();
-    draftSupplier.mutate(
-      { id: rfq.id },
-      {
-        onSuccess: (res) => setModal({ type: "supplier-draft", rfqId: rfq.id, data: res }),
-        onError: () => toast.error("Failed to draft email")
-      }
-    );
+    setModal({ type: "supplier-outreach", rfqId: rfq.id });
+  };
+
+  const handleFindOnline = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setModal({ type: "find-online", rfqId: rfq.id });
   };
 
   const handleDraftCustomer = (e: React.MouseEvent) => {
@@ -354,6 +356,18 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
           </div>
         )}
 
+        {/* Supplier tracker — SOURCING/COMPARING when contacts exist */}
+        {(rfq.stage === "SOURCING" || rfq.stage === "COMPARING") &&
+          (rfq.supplierContacts?.length ?? 0) > 0 && (
+            <SupplierTracker
+              rfq={rfq}
+              onDraftFollowup={(data) =>
+                setModal({ type: "supplier-followup", rfqId: rfq.id, data })
+              }
+              onChanged={invalidateRfqs}
+            />
+          )}
+
         {expanded && (
           <div className="pt-2 flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
             {/* Always available: advance stage */}
@@ -387,21 +401,26 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
               </Button>
             )}
 
-            {/* SOURCING: draft supplier outreach */}
+            {/* SOURCING: source suppliers (new combined flow) */}
             {rfq.stage === "SOURCING" && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs h-7"
-                onClick={handleDraftSupplier}
-                disabled={draftSupplier.isPending}
-              >
-                {draftSupplier.isPending ? (
-                  <><RefreshCw className="w-3 h-3 mr-1.5 animate-spin" /> Drafting...</>
-                ) : (
-                  <><Bot className="w-3 h-3 mr-1.5" /> Draft Supplier Email</>
-                )}
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs h-7"
+                  onClick={handleSourceSuppliers}
+                >
+                  <Bot className="w-3 h-3 mr-1.5" /> Source Suppliers
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full text-xs h-7 text-primary"
+                  onClick={handleFindOnline}
+                >
+                  <Globe className="w-3 h-3 mr-1.5" /> Find Suppliers Online
+                </Button>
+              </>
             )}
 
             {/* SOURCING / COMPARING: log a supplier quote */}
@@ -496,13 +515,38 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
           onConfirmed={() => { setModal(null); invalidateRfqs(); }}
         />
       )}
-      {modal?.type === "supplier-draft" && (
+      {modal?.type === "supplier-outreach" && (
+        <SupplierOutreachModal
+          isOpen
+          rfqId={modal.rfqId}
+          rfq={rfq}
+          onClose={() => { setModal(null); invalidateRfqs(); }}
+        />
+      )}
+      {modal?.type === "find-online" && (
+        <FindSuppliersOnlineModal
+          isOpen
+          rfqId={modal.rfqId}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === "supplier-followup" && (
         <DraftModal
           isOpen
           onClose={() => setModal(null)}
-          title="Supplier Outreach Draft"
-          description="AI-generated outreach. Edit before copying — never sent automatically."
+          title="Supplier Follow-up Draft"
+          description="Gentle nudge to a supplier who hasn't replied. Edit before sending."
           draft={modal.data}
+          onCopied={() => {
+            const contactId = modal.data?.contactId;
+            if (!contactId) return;
+            fetch(`/api/rfq/${rfq.id}/supplier-contacts/${contactId}/follow-up-sent`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+            })
+              .then(() => invalidateRfqs())
+              .catch(() => {/* non-fatal */});
+          }}
         />
       )}
       {modal?.type === "customer-quote" && (
@@ -539,6 +583,125 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
         />
       )}
     </>
+  );
+}
+
+// ─── Supplier Tracker (on SOURCING / COMPARING cards) ─────────────────────────
+
+function SupplierTracker({
+  rfq,
+  onDraftFollowup,
+  onChanged,
+}: {
+  rfq: any;
+  onDraftFollowup: (data: any) => void;
+  onChanged: () => void;
+}) {
+  const updateStatus = useUpdateSupplierContactStatus();
+  const draftFollowup = useDraftSupplierFollowup();
+  const contacts: any[] = rfq.supplierContacts ?? [];
+  const noResp = rfq.noResponseCount ?? 0;
+
+  const fmtHours = (h: number) => {
+    if (h < 1) return "<1h";
+    if (h < 24) return `${Math.round(h)}h`;
+    return `${Math.round(h / 24)}d`;
+  };
+
+  const handlePatch = (contactId: number, status: "responded" | "no_response") => {
+    updateStatus.mutate(
+      { id: rfq.id, contactId, data: { status } },
+      { onSuccess: onChanged, onError: () => toast.error("Failed to update status") },
+    );
+  };
+
+  const handleFollowup = (contactId: number) => {
+    draftFollowup.mutate(
+      { id: rfq.id, data: { contactId, tone: "gentle" } },
+      {
+        // Attach contactId so DraftModal can post follow-up-sent after copy.
+        onSuccess: (res) => onDraftFollowup({ ...res, contactId }),
+        onError: () => toast.error("Failed to draft follow-up"),
+      },
+    );
+  };
+
+  return (
+    <div
+      className="border-t border-border pt-2 mt-1 space-y-1.5"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <Mail className="w-2.5 h-2.5" /> Suppliers contacted
+        </span>
+        <span>
+          {contacts.filter((c) => c.status === "responded").length}/{contacts.length} replied
+        </span>
+      </div>
+
+      {noResp > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/25 text-amber-500 text-[10px] px-2 py-1 rounded flex items-center gap-1.5 font-medium">
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          {noResp} supplier{noResp === 1 ? "" : "s"} silent &gt;48h
+        </div>
+      )}
+
+      <div className="space-y-1">
+        {contacts.map((c) => {
+          const isResponded = c.status === "responded";
+          const isNoResp = c.status === "no_response";
+          const stale = !isResponded && !isNoResp && (c.hoursSinceContact ?? 0) > 48;
+          return (
+            <div
+              key={c.id}
+              className={`text-[10px] rounded border px-1.5 py-1 ${isResponded ? "border-green-500/30 bg-green-500/5" : stale ? "border-amber-500/30 bg-amber-500/5" : "border-border bg-muted/30"}`}
+            >
+              <div className="flex items-center justify-between gap-1">
+                <div className="font-medium truncate flex items-center gap-1">
+                  {isResponded ? (
+                    <Check className="w-2.5 h-2.5 text-green-500 shrink-0" />
+                  ) : isNoResp ? (
+                    <XCircle className="w-2.5 h-2.5 text-muted-foreground shrink-0" />
+                  ) : (
+                    <Clock className="w-2.5 h-2.5 text-muted-foreground shrink-0" />
+                  )}
+                  <span className="truncate">{c.supplierName}</span>
+                </div>
+                <span className="text-muted-foreground shrink-0">
+                  {fmtHours(c.hoursSinceContact ?? 0)}
+                </span>
+              </div>
+              {!isResponded && !isNoResp && (
+                <div className="flex gap-1 mt-1">
+                  <button
+                    onClick={() => handlePatch(c.id, "responded")}
+                    disabled={updateStatus.isPending}
+                    className="text-[9px] px-1.5 py-0.5 rounded border border-green-500/30 text-green-500 hover:bg-green-500/10"
+                  >
+                    Responded
+                  </button>
+                  <button
+                    onClick={() => handlePatch(c.id, "no_response")}
+                    disabled={updateStatus.isPending}
+                    className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted/50"
+                  >
+                    No reply
+                  </button>
+                  <button
+                    onClick={() => handleFollowup(c.id)}
+                    disabled={draftFollowup.isPending}
+                    className="text-[9px] px-1.5 py-0.5 rounded border border-primary/30 text-primary hover:bg-primary/10 ml-auto"
+                  >
+                    Follow-up
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -746,13 +909,15 @@ function DraftModal({
   onClose,
   title,
   description,
-  draft
+  draft,
+  onCopied,
 }: {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   description: string;
   draft: any;
+  onCopied?: () => void;
 }) {
   const [content, setContent] = useState(draft?.draft || "");
   const [copied, setCopied] = useState(false);
@@ -764,6 +929,7 @@ function DraftModal({
       if (draft?.draftId) {
         markCopied.mutate({ draftId: draft.draftId });
       }
+      onCopied?.();
       setTimeout(() => setCopied(false), 2000);
     });
   };

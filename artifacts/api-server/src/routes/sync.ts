@@ -271,6 +271,22 @@ export async function syncAccount(
         })
         .returning();
 
+      // Auto-link supplier replies to any open contact records by sender email.
+      if (inserted && triageResult.classification === "SUPPLIER_REPLY") {
+        try {
+          const { autoLinkSupplierReply } = await import("./supplierContacts.js");
+          const linked = await autoLinkSupplierReply({
+            senderEmail,
+            emailThreadId: inserted.id,
+          });
+          if (linked.length > 0) {
+            log.info({ count: linked.length, threadId: inserted.id }, "Linked supplier reply to contacts");
+          }
+        } catch (err) {
+          log.error({ err }, "autoLinkSupplierReply failed");
+        }
+      }
+
       if (isRfq && inserted) {
         const existingRfq = await db
           .select({ id: rfqRecordsTable.id })

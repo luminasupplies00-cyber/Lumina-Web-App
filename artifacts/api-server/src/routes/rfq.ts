@@ -6,6 +6,7 @@ import {
   rfqSupplierQuotesTable,
   rfqSupplierQuoteLinesTable,
   rfqCustomerQuotesTable,
+  rfqSupplierContactsTable,
   suppliersTable,
   supplierCategoriesTable,
   emailThreadsTable,
@@ -56,10 +57,27 @@ router.get("/rfq", async (req, res) => {
 
         const stuckInfo = computeStuck(rfq);
 
+        const contactRows = await db
+          .select()
+          .from(rfqSupplierContactsTable)
+          .where(eq(rfqSupplierContactsTable.rfqId, rfq.id))
+          .orderBy(rfqSupplierContactsTable.contactedAt);
+
+        const now = Date.now();
+        const supplierContacts = contactRows.map((c) => {
+          const hours = (now - new Date(c.contactedAt).getTime()) / 3_600_000;
+          return { ...c, hoursSinceContact: hours };
+        });
+        const noResponseCount = supplierContacts.filter(
+          (c) => c.status === "contacted" && (c.hoursSinceContact ?? 0) > 48,
+        ).length;
+
         return {
           ...rfq,
           ...stuckInfo,
           products,
+          supplierContacts,
+          noResponseCount,
           emailSubject: thread[0]?.subject ?? null,
           zohoThreadId: thread[0]?.threadId ?? null,
           threadDbId: thread[0]?.id ?? null,

@@ -502,7 +502,25 @@ export const GetRfqsResponse = zod.object({
   "notes": zod.string().nullish(),
   "attachmentType": zod.string(),
   "extractionConfidence": zod.string()
-}))
+})),
+  "supplierContacts": zod.array(zod.object({
+  "id": zod.number(),
+  "rfqId": zod.number(),
+  "supplierId": zod.number().nullish(),
+  "supplierName": zod.string(),
+  "supplierEmail": zod.string(),
+  "contactedAt": zod.string(),
+  "contactMode": zod.string().describe('separate | bcc'),
+  "status": zod.string().describe('contacted | responded | no_response | declined | partial'),
+  "respondedAt": zod.string().nullish(),
+  "responseTimeHours": zod.number().nullish(),
+  "replyThreadId": zod.number().nullish(),
+  "followUpSentAt": zod.string().nullish(),
+  "emailDraftId": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "hoursSinceContact": zod.number().nullish().describe('Computed on read — for stale (>48h) detection')
+})).optional(),
+  "noResponseCount": zod.number().optional().describe('Number of CONTACTED contacts with no response > 48h')
 })))),
   "metrics": zod.object({
   "newToday": zod.number(),
@@ -1054,6 +1072,152 @@ export const DraftFollowupResponse = zod.object({
 
 
 /**
+ * @summary List supplier contacts for an RFQ
+ */
+export const ListSupplierContactsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListSupplierContactsResponse = zod.object({
+  "contacts": zod.array(zod.object({
+  "id": zod.number(),
+  "rfqId": zod.number(),
+  "supplierId": zod.number().nullish(),
+  "supplierName": zod.string(),
+  "supplierEmail": zod.string(),
+  "contactedAt": zod.string(),
+  "contactMode": zod.string().describe('separate | bcc'),
+  "status": zod.string().describe('contacted | responded | no_response | declined | partial'),
+  "respondedAt": zod.string().nullish(),
+  "responseTimeHours": zod.number().nullish(),
+  "replyThreadId": zod.number().nullish(),
+  "followUpSentAt": zod.string().nullish(),
+  "emailDraftId": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "hoursSinceContact": zod.number().nullish().describe('Computed on read — for stale (>48h) detection')
+}))
+})
+
+
+/**
+ * @summary Record a batch of supplier outreach contacts
+ */
+export const BulkCreateSupplierContactsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const BulkCreateSupplierContactsBody = zod.object({
+  "contactMode": zod.string().optional().describe('separate | bcc — applied to all'),
+  "emailDraftId": zod.number().optional(),
+  "contacts": zod.array(zod.object({
+  "supplierId": zod.number().optional(),
+  "supplierName": zod.string(),
+  "supplierEmail": zod.string(),
+  "contactMode": zod.string().optional().describe('separate | bcc (default separate)'),
+  "emailDraftId": zod.number().optional(),
+  "notes": zod.string().optional()
+}))
+})
+
+
+/**
+ * @summary Mark a supplier contact as responded / no_response / declined / partial
+ */
+export const UpdateSupplierContactStatusParams = zod.object({
+  "id": zod.coerce.number(),
+  "contactId": zod.coerce.number()
+})
+
+export const UpdateSupplierContactStatusBody = zod.object({
+  "status": zod.string().describe('responded | no_response | declined | partial'),
+  "notes": zod.string().optional()
+})
+
+export const UpdateSupplierContactStatusResponse = zod.object({
+  "contact": zod.object({
+  "id": zod.number(),
+  "rfqId": zod.number(),
+  "supplierId": zod.number().nullish(),
+  "supplierName": zod.string(),
+  "supplierEmail": zod.string(),
+  "contactedAt": zod.string(),
+  "contactMode": zod.string().describe('separate | bcc'),
+  "status": zod.string().describe('contacted | responded | no_response | declined | partial'),
+  "respondedAt": zod.string().nullish(),
+  "responseTimeHours": zod.number().nullish(),
+  "replyThreadId": zod.number().nullish(),
+  "followUpSentAt": zod.string().nullish(),
+  "emailDraftId": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "hoursSinceContact": zod.number().nullish().describe('Computed on read — for stale (>48h) detection')
+})
+})
+
+
+/**
+ * @summary Use Perplexity to find suppliers online for this RFQ
+ */
+export const FindSuppliersOnlineParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const FindSuppliersOnlineBody = zod.object({
+  "query": zod.string().optional().describe('Free-text override; if omitted, server builds from RFQ products')
+})
+
+export const FindSuppliersOnlineResponse = zod.object({
+  "query": zod.string(),
+  "results": zod.array(zod.object({
+  "name": zod.string(),
+  "website": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "relevance": zod.string().nullish().describe('Why this supplier matches'),
+  "offerings": zod.string().nullish()
+})),
+  "citations": zod.array(zod.string()).optional(),
+  "model": zod.string()
+})
+
+
+/**
+ * @summary Summarise a supplier website via Perplexity
+ */
+export const SummarizeSupplierWebsiteBody = zod.object({
+  "url": zod.string(),
+  "supplierName": zod.string().optional()
+})
+
+export const SummarizeSupplierWebsiteResponse = zod.object({
+  "summary": zod.string(),
+  "offerings": zod.string().nullish(),
+  "contactEmail": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "citations": zod.array(zod.string()).optional(),
+  "model": zod.string()
+})
+
+
+/**
+ * @summary AI-draft a supplier follow-up message for a specific contact
+ */
+export const DraftSupplierFollowupParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DraftSupplierFollowupBody = zod.object({
+  "contactId": zod.number().optional(),
+  "tone": zod.string().optional().describe('gentle | urgent (default gentle)')
+})
+
+export const DraftSupplierFollowupResponse = zod.object({
+  "draft": zod.string(),
+  "draftId": zod.number().nullish(),
+  "model": zod.string().optional()
+})
+
+
+/**
  * @summary Get supplier comparison table with landed cost and AI recommendation
  */
 export const CompareSupplierQuotesParams = zod.object({
@@ -1140,6 +1304,7 @@ export const GetSuppliersResponse = zod.object({
   "company": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
+  "website": zod.string().nullish(),
   "country": zod.string(),
   "currency": zod.string(),
   "typicalLeadTimeDays": zod.number().nullish(),
@@ -1147,6 +1312,11 @@ export const GetSuppliersResponse = zod.object({
   "paymentTerms": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "isActive": zod.boolean(),
+  "totalContacts": zod.number().optional(),
+  "totalResponses": zod.number().optional(),
+  "lastContactedAt": zod.string().nullish(),
+  "lastRespondedAt": zod.string().nullish(),
+  "responseRatePercent": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 }).and(zod.object({
@@ -1197,6 +1367,7 @@ export const GetSupplierResponse = zod.object({
   "company": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
+  "website": zod.string().nullish(),
   "country": zod.string(),
   "currency": zod.string(),
   "typicalLeadTimeDays": zod.number().nullish(),
@@ -1204,6 +1375,11 @@ export const GetSupplierResponse = zod.object({
   "paymentTerms": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "isActive": zod.boolean(),
+  "totalContacts": zod.number().optional(),
+  "totalResponses": zod.number().optional(),
+  "lastContactedAt": zod.string().nullish(),
+  "lastRespondedAt": zod.string().nullish(),
+  "responseRatePercent": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 }).and(zod.object({
@@ -1246,6 +1422,7 @@ export const UpdateSupplierResponse = zod.object({
   "company": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
+  "website": zod.string().nullish(),
   "country": zod.string(),
   "currency": zod.string(),
   "typicalLeadTimeDays": zod.number().nullish(),
@@ -1253,6 +1430,11 @@ export const UpdateSupplierResponse = zod.object({
   "paymentTerms": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "isActive": zod.boolean(),
+  "totalContacts": zod.number().optional(),
+  "totalResponses": zod.number().optional(),
+  "lastContactedAt": zod.string().nullish(),
+  "lastRespondedAt": zod.string().nullish(),
+  "responseRatePercent": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 }).and(zod.object({

@@ -232,6 +232,10 @@ importers:
         version: 3.1.0
 
   artifacts/lumina-hq:
+    dependencies:
+      xlsx:
+        specifier: ^0.18.5
+        version: 0.18.5
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0

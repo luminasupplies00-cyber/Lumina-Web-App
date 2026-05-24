@@ -124,3 +124,57 @@ export async function callAI(opts: {
   const text = await callClaude({ ...opts, model });
   return { text, model };
 }
+
+// ─── Perplexity (web-search-grounded) ─────────────────────────────────────────
+export const PERPLEXITY_MODEL = "sonar-pro";
+
+interface PerplexityResponse {
+  choices: Array<{ message: { role: string; content: string } }>;
+  citations?: string[];
+  model: string;
+}
+
+export async function callPerplexity(opts: {
+  system: string;
+  userMessage: string;
+  maxTokens?: number;
+  searchRecency?: "month" | "week" | "day" | "year";
+}): Promise<{ text: string; citations: string[]; model: string }> {
+  const apiKey = process.env["PERPLEXITY_API_KEY"];
+  if (!apiKey) {
+    throw new Error(
+      "PERPLEXITY_API_KEY environment variable is not set. Add it in Replit Secrets.",
+    );
+  }
+
+  const body = {
+    model: PERPLEXITY_MODEL,
+    max_tokens: opts.maxTokens ?? 1200,
+    messages: [
+      { role: "system", content: opts.system },
+      { role: "user", content: opts.userMessage },
+    ],
+    ...(opts.searchRecency && { search_recency_filter: opts.searchRecency }),
+  };
+
+  logger.info({ model: PERPLEXITY_MODEL, maxTokens: body.max_tokens }, "Calling Perplexity API");
+
+  const res = await fetch("https://api.perplexity.ai/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Perplexity API error ${res.status}: ${text}`);
+  }
+
+  const data = (await res.json()) as PerplexityResponse;
+  const text = data.choices[0]?.message.content ?? "";
+  if (!text) throw new Error("Perplexity returned no content");
+  return { text, citations: data.citations ?? [], model: data.model };
+}

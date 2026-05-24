@@ -10,7 +10,8 @@ import {
   emailThreadsTable,
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { callAI, type AIAttachment } from "../lib/aiClient.js";
+import { callAI, callPerplexity, type AIAttachment } from "../lib/aiClient.js";
+import { rfqSupplierContactsTable } from "@workspace/db";
 import { AI_MAX_TOKENS } from "../lib/aiConstants.js";
 import {
   getAllZohoConnections,
@@ -856,6 +857,198 @@ router.post("/ai/reclassify-all", async (req, res) => {
     res.json({ ok: true, total: threads.length, processed, failed, counts });
   } catch (err) {
     req.log.error({ err }, "Reclassify-all failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─── Perplexity: Find suppliers online ────────────────────────────────────────
+router.post("/rfq/:id/find-suppliers-online", async (req, res) => {
+  try {
+    const rfqId = parseInt(req.params["id"] ?? "0");
+    const body = (req.body ?? {}) as { query?: string };
+
+    const rfq = await getRfqOrFail(rfqId);
+    if (!rfq) {
+      res.status(404).json({ error: "RFQ not found" });
+      return;
+    }
+
+    let query = body.query?.trim();
+    if (!query) {
+      const products = await db.select().from(rfqProductsTable).where(eq(rfqProductsTable.rfqId, rfqId));
+      const productSummary = products.slice(0, 10)
+        .map((p) => `${p.productName}${p.catalogueNumber ? ` (${p.catalogueNumber})` : ""}${p.brand ? ` ${p.brand}` : ""}`)
+        .join("; ");
+      query = `Suppliers or distributors in Saudi Arabia (or international suppliers shipping to KSA) for laboratory / scientific products: ${productSummary || "lab supplies"}.`;
+    }
+
+    const system = `You are a B2B sourcing assistant for Lumina Supplies (a Saudi Arabia lab supplier).
+Your job is to find real, verifiable supplier or distributor companies for the requested products.
+
+Return ONLY valid JSON in this exact shape, no prose, no markdown fences:
+{"results":[{"name":"...","website":"...","email":"...","country":"...","relevance":"...","offerings":"..."}]}
+
+Rules:
+- 5-10 results max, ranked by relevance.
+- Prefer suppliers based in or shipping to Saudi Arabia / GCC.
+- Use only contact emails you can verify on the company's website. If unknown, set "email" to null.
+- "relevance" is one short sentence on why they fit.
+- Never invent emails or URLs.`;
+
+    const { text, citations, model } = await callPerplexity({
+      system,
+      userMessage: query,
+      maxTokens: 1500,
+    });
+
+    // Extract JSON
+    type Result = {
+      name: string;
+      website: string | null;
+      email: string | null;
+      country: string | null;
+      relevance: string | null;
+      offerings: string | null;
+    };
+    let results: Result[] = [];
+    try {
+      const cleaned = text.replace(/```json\s*|\s*```/g, "").trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(match ? match[0] : cleaned) as { results?: Result[] };
+      results = Array.isArray(parsed.results) ? parsed.results : [];
+    } catch (e) {
+      req.log.warn({ err: e, text }, "Failed to parse Perplexity supplier search result");
+    }
+
+    res.json({ query, results, citations, model });
+  } catch (err) {
+    req.log.error({ err }, "find-suppliers-online failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─── Perplexity: summarize a supplier website ─────────────────────────────────
+router.post("/ai/summarize-supplier-website", async (req, res) => {
+  try {
+    const body = req.body as { url: string; supplierName?: string };
+    if (!body.url) {
+      res.status(400).json({ error: "url is required" });
+      return;
+    }
+
+    const system = `You are a B2B sourcing analyst. Given a supplier website URL, summarise:
+- What they sell (1-2 sentences)
+- Key product categories or brands carried
+- Country / region
+- Contact email (only if found on the site)
+
+Return ONLY valid JSON, no prose:
+{"summary":"...","offerings":"...","contactEmail":"... or null","country":"... or null"}`;
+
+    const userMessage = `Supplier website: ${body.url}${body.supplierName ? `\nCompany name: ${body.supplierName}` : ""}\n\nSummarise this supplier.`;
+
+    const { text, citations, model } = await callPerplexity({
+      system,
+      userMessage,
+      maxTokens: 800,
+    });
+
+    type Parsed = { summary: string; offerings?: string | null; contactEmail?: string | null; country?: string | null };
+    let parsed: Parsed = { summary: text };
+    try {
+      const cleaned = text.replace(/```json\s*|\s*```/g, "").trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(match ? match[0] : cleaned) as Parsed;
+    } catch (e) {
+      req.log.warn({ err: e }, "Falling back to raw text for website summary");
+    }
+
+    res.json({
+      summary: parsed.summary ?? text,
+      offerings: parsed.offerings ?? null,
+      contactEmail: parsed.contactEmail ?? null,
+      country: parsed.country ?? null,
+      citations,
+      model,
+    });
+  } catch (err) {
+    req.log.error({ err }, "summarize-supplier-website failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─── Per-contact supplier follow-up draft ─────────────────────────────────────
+router.post("/rfq/:id/draft-supplier-followup", async (req, res) => {
+  try {
+    const rfqId = parseInt(req.params["id"] ?? "0");
+    const body = req.body as { contactId?: number; tone?: "gentle" | "urgent" };
+
+    const rfq = await getRfqOrFail(rfqId);
+    if (!rfq) {
+      res.status(404).json({ error: "RFQ not found" });
+      return;
+    }
+
+    let supplierName = "Supplier";
+    let hoursSince: number | null = null;
+    if (body.contactId) {
+      const { and } = await import("drizzle-orm");
+      const rows = await db
+        .select()
+        .from(rfqSupplierContactsTable)
+        .where(
+          and(
+            eq(rfqSupplierContactsTable.id, body.contactId),
+            eq(rfqSupplierContactsTable.rfqId, rfqId),
+          ),
+        )
+        .limit(1);
+      if (!rows[0]) {
+        res.status(404).json({ error: "Contact not found for this RFQ" });
+        return;
+      }
+      supplierName = rows[0].supplierName;
+      hoursSince = (Date.now() - new Date(rows[0].contactedAt).getTime()) / 3_600_000;
+    }
+
+    const products = await db.select().from(rfqProductsTable).where(eq(rfqProductsTable.rfqId, rfqId));
+    const productList = products.slice(0, 8)
+      .map((p, i) => `${i + 1}. ${p.productName}${p.catalogueNumber ? ` (${p.catalogueNumber})` : ""}${p.quantity ? ` × ${p.quantity}` : ""}`)
+      .join("\n");
+
+    const tone = body.tone ?? "gentle";
+    const system = `You are writing a ${tone} follow-up email from Lumina Supplies (a Saudi Arabia B2B lab supplier) to a supplier we asked for a quote.
+Style:
+- Professional, concise (4-6 short sentences).
+- ${tone === "urgent" ? "Make clear the client needs a fast response." : "Polite reminder; do not pressure."}
+- Reference the original inquiry briefly.
+- Re-attach the request: ask for unit price (SAR preferred), lead time, MOQ, validity.
+- Plain text only, no HTML.
+- End with a Lumina Supplies sign-off.`;
+
+    const userMessage = `Supplier: ${supplierName}
+Customer: ${rfq.customerName}${rfq.customerCompany ? ` (${rfq.customerCompany})` : ""}
+Original inquiry sent ${hoursSince ? `${Math.round(hoursSince)}h ago` : "previously"}.
+
+Products requested:
+${productList || "(see original email)"}
+
+Draft the follow-up email.`;
+
+    const { text, model } = await callAI({
+      system,
+      userMessage,
+      maxTokens: AI_MAX_TOKENS.FOLLOWUP,
+    });
+
+    const [draft] = await db
+      .insert(aiDraftsTable)
+      .values({ rfqId, draftType: "supplier_followup", content: text, modelUsed: model })
+      .returning();
+
+    res.json({ draft: text, draftId: draft?.id, model });
+  } catch (err) {
+    req.log.error({ err }, "draft-supplier-followup failed");
     res.status(500).json({ error: String(err) });
   }
 });

@@ -13,6 +13,8 @@ export interface SupplierRecord {
   email: string;
   /** @nullable */
   phone?: string | null;
+  /** @nullable */
+  website?: string | null;
   country: string;
   currency: string;
   /** @nullable */
@@ -24,6 +26,14 @@ export interface SupplierRecord {
   /** @nullable */
   notes?: string | null;
   isActive: boolean;
+  totalContacts?: number;
+  totalResponses?: number;
+  /** @nullable */
+  lastContactedAt?: string | null;
+  /** @nullable */
+  lastRespondedAt?: string | null;
+  /** @nullable */
+  responseRatePercent?: number | null;
   createdAt: string;
   updatedAt?: string;
 }

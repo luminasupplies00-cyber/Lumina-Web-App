@@ -283,9 +283,126 @@ export interface RfqProduct {
   extractionConfidence: string;
 }
 
+export interface SupplierContactRecord {
+  id: number;
+  rfqId: number;
+  /** @nullable */
+  supplierId?: number | null;
+  supplierName: string;
+  supplierEmail: string;
+  contactedAt: string;
+  /** separate | bcc */
+  contactMode: string;
+  /** contacted | responded | no_response | declined | partial */
+  status: string;
+  /** @nullable */
+  respondedAt?: string | null;
+  /** @nullable */
+  responseTimeHours?: number | null;
+  /** @nullable */
+  replyThreadId?: number | null;
+  /** @nullable */
+  followUpSentAt?: string | null;
+  /** @nullable */
+  emailDraftId?: number | null;
+  /** @nullable */
+  notes?: string | null;
+  /**
+     * Computed on read — for stale (>48h) detection
+     * @nullable
+     */
+  hoursSinceContact?: number | null;
+}
+
 export type RfqWithProducts = RfqRecord & {
   products: RfqProduct[];
+  supplierContacts?: SupplierContactRecord[];
+  /** Number of CONTACTED contacts with no response > 48h */
+  noResponseCount?: number;
 };
+
+export interface SupplierContactInput {
+  supplierId?: number;
+  supplierName: string;
+  supplierEmail: string;
+  /** separate | bcc (default separate) */
+  contactMode?: string;
+  emailDraftId?: number;
+  notes?: string;
+}
+
+export interface BulkSupplierContactsInput {
+  /** separate | bcc — applied to all */
+  contactMode?: string;
+  emailDraftId?: number;
+  contacts: SupplierContactInput[];
+}
+
+export interface BulkSupplierContactsResponse {
+  contacts: SupplierContactRecord[];
+}
+
+export interface SupplierContactStatusUpdate {
+  /** responded | no_response | declined | partial */
+  status: string;
+  notes?: string;
+}
+
+export interface SupplierContactResponse {
+  contact: SupplierContactRecord;
+}
+
+export interface FindSuppliersOnlineInput {
+  /** Free-text override; if omitted, server builds from RFQ products */
+  query?: string;
+}
+
+export interface FindSuppliersOnlineResult {
+  name: string;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /**
+     * Why this supplier matches
+     * @nullable
+     */
+  relevance?: string | null;
+  /** @nullable */
+  offerings?: string | null;
+}
+
+export interface FindSuppliersResult {
+  query: string;
+  results: FindSuppliersOnlineResult[];
+  citations?: string[];
+  model: string;
+}
+
+export interface SummarizeSupplierWebsiteInput {
+  url: string;
+  supplierName?: string;
+}
+
+export interface WebsiteSummaryResult {
+  summary: string;
+  /** @nullable */
+  offerings?: string | null;
+  /** @nullable */
+  contactEmail?: string | null;
+  /** @nullable */
+  country?: string | null;
+  citations?: string[];
+  model: string;
+}
+
+export interface SupplierFollowupInput {
+  contactId?: number;
+  /** gentle | urgent (default gentle) */
+  tone?: string;
+}
 
 export interface PipelineMetrics {
   newToday: number;
@@ -559,6 +676,8 @@ export interface SupplierRecord {
   email: string;
   /** @nullable */
   phone?: string | null;
+  /** @nullable */
+  website?: string | null;
   country: string;
   currency: string;
   /** @nullable */
@@ -570,6 +689,14 @@ export interface SupplierRecord {
   /** @nullable */
   notes?: string | null;
   isActive: boolean;
+  totalContacts?: number;
+  totalResponses?: number;
+  /** @nullable */
+  lastContactedAt?: string | null;
+  /** @nullable */
+  lastRespondedAt?: string | null;
+  /** @nullable */
+  responseRatePercent?: number | null;
   createdAt: string;
   updatedAt?: string;
 }

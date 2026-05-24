@@ -7,6 +7,7 @@ import threadsRouter from "./threads.js";
 import rfqRouter from "./rfq.js";
 import aiRouter from "./ai.js";
 import suppliersRouter from "./suppliers.js";
+import supplierContactsRouter from "./supplierContacts.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(threadsRouter);
 router.use(rfqRouter);
 router.use(aiRouter);
 router.use(suppliersRouter);
+router.use(supplierContactsRouter);
 
 export default router;

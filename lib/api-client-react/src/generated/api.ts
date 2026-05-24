@@ -22,6 +22,8 @@ import type {
 import type {
   ArchiveThread200,
   BackfillRfqsFromThreads200,
+  BulkSupplierContactsInput,
+  BulkSupplierContactsResponse,
   ComparisonResponse,
   ConversationResponse,
   CreateRfqFromThread200,
@@ -34,6 +36,8 @@ import type {
   EmailSummary,
   ExtractionConfirmInput,
   ExtractionConfirmResponse,
+  FindSuppliersOnlineInput,
+  FindSuppliersResult,
   FollowupDraftResponse,
   FullEmailResponse,
   GetSuppliersParams,
@@ -63,9 +67,13 @@ import type {
   SettingsResponse,
   StageUpdate,
   SuggestedSuppliersResponse,
+  SummarizeSupplierWebsiteInput,
   SupplierCategoryInput,
   SupplierCategoryResponse,
+  SupplierContactResponse,
+  SupplierContactStatusUpdate,
   SupplierDetailResponse,
+  SupplierFollowupInput,
   SupplierInput,
   SupplierPerformanceResponse,
   SupplierQuoteInput,
@@ -75,6 +83,7 @@ import type {
   SyncStatus,
   ThreadResponse,
   ThreadsResponse,
+  WebsiteSummaryResult,
   ZohoAccountLabelUpdate,
   ZohoAuthUrl,
   ZohoStatus
@@ -3192,6 +3201,444 @@ export const useDraftFollowup = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDraftFollowupMutationOptions(options));
+    }
+
+export const getListSupplierContactsUrl = (id: number,) => {
+
+
+
+
+  return `/api/rfq/${id}/supplier-contacts`
+}
+
+/**
+ * @summary List supplier contacts for an RFQ
+ */
+export const listSupplierContacts = async (id: number, options?: RequestInit): Promise<BulkSupplierContactsResponse> => {
+
+  return customFetch<BulkSupplierContactsResponse>(getListSupplierContactsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSupplierContactsQueryKey = (id: number,) => {
+    return [
+    `/api/rfq/${id}/supplier-contacts`
+    ] as const;
+    }
+
+
+export const getListSupplierContactsQueryOptions = <TData = Awaited<ReturnType<typeof listSupplierContacts>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierContacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSupplierContactsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupplierContacts>>> = ({ signal }) => listSupplierContacts(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSupplierContacts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSupplierContactsQueryResult = NonNullable<Awaited<ReturnType<typeof listSupplierContacts>>>
+export type ListSupplierContactsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List supplier contacts for an RFQ
+ */
+
+export function useListSupplierContacts<TData = Awaited<ReturnType<typeof listSupplierContacts>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierContacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSupplierContactsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getBulkCreateSupplierContactsUrl = (id: number,) => {
+
+
+
+
+  return `/api/rfq/${id}/supplier-contacts`
+}
+
+/**
+ * @summary Record a batch of supplier outreach contacts
+ */
+export const bulkCreateSupplierContacts = async (id: number,
+    bulkSupplierContactsInput: BulkSupplierContactsInput, options?: RequestInit): Promise<BulkSupplierContactsResponse> => {
+
+  return customFetch<BulkSupplierContactsResponse>(getBulkCreateSupplierContactsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bulkSupplierContactsInput,)
+  }
+);}
+
+
+
+
+export const getBulkCreateSupplierContactsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkCreateSupplierContacts>>, TError,{id: number;data: BodyType<BulkSupplierContactsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkCreateSupplierContacts>>, TError,{id: number;data: BodyType<BulkSupplierContactsInput>}, TContext> => {
+
+const mutationKey = ['bulkCreateSupplierContacts'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkCreateSupplierContacts>>, {id: number;data: BodyType<BulkSupplierContactsInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  bulkCreateSupplierContacts(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkCreateSupplierContactsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkCreateSupplierContacts>>>
+    export type BulkCreateSupplierContactsMutationBody = BodyType<BulkSupplierContactsInput>
+    export type BulkCreateSupplierContactsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record a batch of supplier outreach contacts
+ */
+export const useBulkCreateSupplierContacts = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkCreateSupplierContacts>>, TError,{id: number;data: BodyType<BulkSupplierContactsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkCreateSupplierContacts>>,
+        TError,
+        {id: number;data: BodyType<BulkSupplierContactsInput>},
+        TContext
+      > => {
+      return useMutation(getBulkCreateSupplierContactsMutationOptions(options));
+    }
+
+export const getUpdateSupplierContactStatusUrl = (id: number,
+    contactId: number,) => {
+
+
+
+
+  return `/api/rfq/${id}/supplier-contacts/${contactId}`
+}
+
+/**
+ * @summary Mark a supplier contact as responded / no_response / declined / partial
+ */
+export const updateSupplierContactStatus = async (id: number,
+    contactId: number,
+    supplierContactStatusUpdate: SupplierContactStatusUpdate, options?: RequestInit): Promise<SupplierContactResponse> => {
+
+  return customFetch<SupplierContactResponse>(getUpdateSupplierContactStatusUrl(id,contactId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      supplierContactStatusUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateSupplierContactStatusMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSupplierContactStatus>>, TError,{id: number;contactId: number;data: BodyType<SupplierContactStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSupplierContactStatus>>, TError,{id: number;contactId: number;data: BodyType<SupplierContactStatusUpdate>}, TContext> => {
+
+const mutationKey = ['updateSupplierContactStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSupplierContactStatus>>, {id: number;contactId: number;data: BodyType<SupplierContactStatusUpdate>}> = (props) => {
+          const {id,contactId,data} = props ?? {};
+
+          return  updateSupplierContactStatus(id,contactId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSupplierContactStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateSupplierContactStatus>>>
+    export type UpdateSupplierContactStatusMutationBody = BodyType<SupplierContactStatusUpdate>
+    export type UpdateSupplierContactStatusMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark a supplier contact as responded / no_response / declined / partial
+ */
+export const useUpdateSupplierContactStatus = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSupplierContactStatus>>, TError,{id: number;contactId: number;data: BodyType<SupplierContactStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSupplierContactStatus>>,
+        TError,
+        {id: number;contactId: number;data: BodyType<SupplierContactStatusUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateSupplierContactStatusMutationOptions(options));
+    }
+
+export const getFindSuppliersOnlineUrl = (id: number,) => {
+
+
+
+
+  return `/api/rfq/${id}/find-suppliers-online`
+}
+
+/**
+ * @summary Use Perplexity to find suppliers online for this RFQ
+ */
+export const findSuppliersOnline = async (id: number,
+    findSuppliersOnlineInput?: FindSuppliersOnlineInput, options?: RequestInit): Promise<FindSuppliersResult> => {
+
+  return customFetch<FindSuppliersResult>(getFindSuppliersOnlineUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      findSuppliersOnlineInput,)
+  }
+);}
+
+
+
+
+export const getFindSuppliersOnlineMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof findSuppliersOnline>>, TError,{id: number;data?: BodyType<FindSuppliersOnlineInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof findSuppliersOnline>>, TError,{id: number;data?: BodyType<FindSuppliersOnlineInput>}, TContext> => {
+
+const mutationKey = ['findSuppliersOnline'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof findSuppliersOnline>>, {id: number;data?: BodyType<FindSuppliersOnlineInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  findSuppliersOnline(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FindSuppliersOnlineMutationResult = NonNullable<Awaited<ReturnType<typeof findSuppliersOnline>>>
+    export type FindSuppliersOnlineMutationBody = BodyType<FindSuppliersOnlineInput> | undefined
+    export type FindSuppliersOnlineMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Use Perplexity to find suppliers online for this RFQ
+ */
+export const useFindSuppliersOnline = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof findSuppliersOnline>>, TError,{id: number;data?: BodyType<FindSuppliersOnlineInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof findSuppliersOnline>>,
+        TError,
+        {id: number;data?: BodyType<FindSuppliersOnlineInput>},
+        TContext
+      > => {
+      return useMutation(getFindSuppliersOnlineMutationOptions(options));
+    }
+
+export const getSummarizeSupplierWebsiteUrl = () => {
+
+
+
+
+  return `/api/ai/summarize-supplier-website`
+}
+
+/**
+ * @summary Summarise a supplier website via Perplexity
+ */
+export const summarizeSupplierWebsite = async (summarizeSupplierWebsiteInput: SummarizeSupplierWebsiteInput, options?: RequestInit): Promise<WebsiteSummaryResult> => {
+
+  return customFetch<WebsiteSummaryResult>(getSummarizeSupplierWebsiteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      summarizeSupplierWebsiteInput,)
+  }
+);}
+
+
+
+
+export const getSummarizeSupplierWebsiteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof summarizeSupplierWebsite>>, TError,{data: BodyType<SummarizeSupplierWebsiteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof summarizeSupplierWebsite>>, TError,{data: BodyType<SummarizeSupplierWebsiteInput>}, TContext> => {
+
+const mutationKey = ['summarizeSupplierWebsite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof summarizeSupplierWebsite>>, {data: BodyType<SummarizeSupplierWebsiteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  summarizeSupplierWebsite(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SummarizeSupplierWebsiteMutationResult = NonNullable<Awaited<ReturnType<typeof summarizeSupplierWebsite>>>
+    export type SummarizeSupplierWebsiteMutationBody = BodyType<SummarizeSupplierWebsiteInput>
+    export type SummarizeSupplierWebsiteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Summarise a supplier website via Perplexity
+ */
+export const useSummarizeSupplierWebsite = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof summarizeSupplierWebsite>>, TError,{data: BodyType<SummarizeSupplierWebsiteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof summarizeSupplierWebsite>>,
+        TError,
+        {data: BodyType<SummarizeSupplierWebsiteInput>},
+        TContext
+      > => {
+      return useMutation(getSummarizeSupplierWebsiteMutationOptions(options));
+    }
+
+export const getDraftSupplierFollowupUrl = (id: number,) => {
+
+
+
+
+  return `/api/rfq/${id}/draft-supplier-followup`
+}
+
+/**
+ * @summary AI-draft a supplier follow-up message for a specific contact
+ */
+export const draftSupplierFollowup = async (id: number,
+    supplierFollowupInput: SupplierFollowupInput, options?: RequestInit): Promise<DraftResponse> => {
+
+  return customFetch<DraftResponse>(getDraftSupplierFollowupUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      supplierFollowupInput,)
+  }
+);}
+
+
+
+
+export const getDraftSupplierFollowupMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftSupplierFollowup>>, TError,{id: number;data: BodyType<SupplierFollowupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftSupplierFollowup>>, TError,{id: number;data: BodyType<SupplierFollowupInput>}, TContext> => {
+
+const mutationKey = ['draftSupplierFollowup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftSupplierFollowup>>, {id: number;data: BodyType<SupplierFollowupInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  draftSupplierFollowup(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftSupplierFollowupMutationResult = NonNullable<Awaited<ReturnType<typeof draftSupplierFollowup>>>
+    export type DraftSupplierFollowupMutationBody = BodyType<SupplierFollowupInput>
+    export type DraftSupplierFollowupMutationError = ErrorType<unknown>
+
+    /**
+ * @summary AI-draft a supplier follow-up message for a specific contact
+ */
+export const useDraftSupplierFollowup = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftSupplierFollowup>>, TError,{id: number;data: BodyType<SupplierFollowupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftSupplierFollowup>>,
+        TError,
+        {id: number;data: BodyType<SupplierFollowupInput>},
+        TContext
+      > => {
+      return useMutation(getDraftSupplierFollowupMutationOptions(options));
     }
 
 export const getCompareSupplierQuotesUrl = (id: number,) => {

@@ -861,6 +861,147 @@ paths:
               schema:
                 $ref: "#/components/schemas/FollowupDraftResponse"
 
+  /rfq/{id}/supplier-contacts:
+    get:
+      operationId: listSupplierContacts
+      tags: [rfq]
+      summary: List supplier contacts for an RFQ
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Contacts list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkSupplierContactsResponse"
+    post:
+      operationId: bulkCreateSupplierContacts
+      tags: [rfq]
+      summary: Record a batch of supplier outreach contacts
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkSupplierContactsInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkSupplierContactsResponse"
+
+  /rfq/{id}/supplier-contacts/{contactId}:
+    patch:
+      operationId: updateSupplierContactStatus
+      tags: [rfq]
+      summary: Mark a supplier contact as responded / no_response / declined / partial
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: contactId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierContactStatusUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierContactResponse"
+
+  /rfq/{id}/find-suppliers-online:
+    post:
+      operationId: findSuppliersOnline
+      tags: [ai]
+      summary: Use Perplexity to find suppliers online for this RFQ
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FindSuppliersOnlineInput"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindSuppliersResult"
+
+  /ai/summarize-supplier-website:
+    post:
+      operationId: summarizeSupplierWebsite
+      tags: [ai]
+      summary: Summarise a supplier website via Perplexity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummarizeSupplierWebsiteInput"
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebsiteSummaryResult"
+
+  /rfq/{id}/draft-supplier-followup:
+    post:
+      operationId: draftSupplierFollowup
+      tags: [ai]
+      summary: AI-draft a supplier follow-up message for a specific contact
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierFollowupInput"
+      responses:
+        "200":
+          description: Draft content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftResponse"
+
   /rfq/{id}/compare:
     get:
       operationId: compareSupplierQuotes
@@ -1510,6 +1651,188 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/RfqProduct"
+            supplierContacts:
+              type: array
+              items:
+                $ref: "#/components/schemas/SupplierContactRecord"
+            noResponseCount:
+              type: integer
+              description: Number of CONTACTED contacts with no response > 48h
+
+    SupplierContactRecord:
+      type: object
+      required: [id, rfqId, supplierName, supplierEmail, contactedAt, contactMode, status]
+      properties:
+        id:
+          type: integer
+        rfqId:
+          type: integer
+        supplierId:
+          type: ["integer", "null"]
+        supplierName:
+          type: string
+        supplierEmail:
+          type: string
+        contactedAt:
+          type: string
+        contactMode:
+          type: string
+          description: separate | bcc
+        status:
+          type: string
+          description: contacted | responded | no_response | declined | partial
+        respondedAt:
+          type: ["string", "null"]
+        responseTimeHours:
+          type: ["integer", "null"]
+        replyThreadId:
+          type: ["integer", "null"]
+        followUpSentAt:
+          type: ["string", "null"]
+        emailDraftId:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        hoursSinceContact:
+          type: ["number", "null"]
+          description: Computed on read — for stale (>48h) detection
+
+    SupplierContactInput:
+      type: object
+      required: [supplierName, supplierEmail]
+      properties:
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        supplierEmail:
+          type: string
+        contactMode:
+          type: string
+          description: separate | bcc (default separate)
+        emailDraftId:
+          type: integer
+        notes:
+          type: string
+
+    BulkSupplierContactsInput:
+      type: object
+      required: [contacts]
+      properties:
+        contactMode:
+          type: string
+          description: separate | bcc — applied to all
+        emailDraftId:
+          type: integer
+        contacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierContactInput"
+
+    BulkSupplierContactsResponse:
+      type: object
+      required: [contacts]
+      properties:
+        contacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierContactRecord"
+
+    SupplierContactStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: responded | no_response | declined | partial
+        notes:
+          type: string
+
+    SupplierContactResponse:
+      type: object
+      required: [contact]
+      properties:
+        contact:
+          $ref: "#/components/schemas/SupplierContactRecord"
+
+    FindSuppliersOnlineInput:
+      type: object
+      properties:
+        query:
+          type: string
+          description: Free-text override; if omitted, server builds from RFQ products
+
+    FindSuppliersOnlineResult:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        website:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        relevance:
+          type: ["string", "null"]
+          description: Why this supplier matches
+        offerings:
+          type: ["string", "null"]
+
+    FindSuppliersResult:
+      type: object
+      required: [results, query, model]
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/FindSuppliersOnlineResult"
+        citations:
+          type: array
+          items:
+            type: string
+        model:
+          type: string
+
+    SummarizeSupplierWebsiteInput:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+        supplierName:
+          type: string
+
+    WebsiteSummaryResult:
+      type: object
+      required: [summary, model]
+      properties:
+        summary:
+          type: string
+        offerings:
+          type: ["string", "null"]
+        contactEmail:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        citations:
+          type: array
+          items:
+            type: string
+        model:
+          type: string
+
+    SupplierFollowupInput:
+      type: object
+      properties:
+        contactId:
+          type: integer
+        tone:
+          type: string
+          description: "gentle | urgent (default gentle)"
 
     PipelineMetrics:
       type: object
@@ -1991,6 +2314,8 @@ components:
           type: string
         phone:
           type: ["string", "null"]
+        website:
+          type: ["string", "null"]
         country:
           type: string
         currency:
@@ -2005,6 +2330,16 @@ components:
           type: ["string", "null"]
         isActive:
           type: boolean
+        totalContacts:
+          type: integer
+        totalResponses:
+          type: integer
+        lastContactedAt:
+          type: ["string", "null"]
+        lastRespondedAt:
+          type: ["string", "null"]
+        responseRatePercent:
+          type: ["integer", "null"]
         createdAt:
           type: string
         updatedAt:
