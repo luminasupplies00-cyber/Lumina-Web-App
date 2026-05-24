@@ -10,8 +10,37 @@ import {
   emailThreadsTable,
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { callAI } from "../lib/aiClient.js";
+import { callAI, type AIAttachment } from "../lib/aiClient.js";
 import { AI_MAX_TOKENS } from "../lib/aiConstants.js";
+import {
+  getAllZohoConnections,
+  downloadAttachment,
+  findMessageFolderId,
+} from "../lib/zohoClient.js";
+
+// Anthropic limits: ~5MB per image, ~32MB per PDF. We cap each file at 4.5MB
+// to leave headroom for base64 overhead, and cap the total payload to keep
+// AI calls fast and within model input limits.
+const MAX_ATTACHMENT_BYTES = 4_500_000;
+const MAX_TOTAL_ATTACHMENT_BYTES = 15_000_000;
+const MAX_ATTACHMENT_COUNT = 8;
+// Anthropic-supported image media types only.
+const ANTHROPIC_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
+function inferAttachmentMime(name: string, fallback?: string): string | null {
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "gif") return "image/gif";
+  if (ext === "webp") return "image/webp";
+  // Trust the Zoho-reported MIME only if it's in the Anthropic allowlist.
+  if (fallback) {
+    const m = fallback.toLowerCase().split(";")[0]?.trim() ?? "";
+    if (m === "application/pdf" || ANTHROPIC_IMAGE_MIMES.has(m)) return m;
+  }
+  return null;
+}
 
 const router = Router();
 
@@ -30,18 +59,78 @@ router.post("/rfq/:id/extract-products", async (req, res) => {
     }
 
     let emailBody = "";
+    let threadRow: typeof emailThreadsTable.$inferSelect | null = null;
     if (rfq.emailThreadId) {
-      const thread = await db
-        .select({ bodyText: emailThreadsTable.bodyText, snippet: emailThreadsTable.snippet })
+      const rows = await db
+        .select()
         .from(emailThreadsTable)
         .where(eq(emailThreadsTable.id, rfq.emailThreadId))
         .limit(1);
-      emailBody = thread[0]?.bodyText ?? thread[0]?.snippet ?? "";
+      threadRow = rows[0] ?? null;
+      emailBody = threadRow?.bodyText ?? threadRow?.snippet ?? "";
     }
 
-    if (!emailBody) {
+    // Fetch supported attachments (PDFs, images) from the thread and pass them
+    // to Claude so it can extract products from quote sheets / spec docs too.
+    const aiAttachments: AIAttachment[] = [];
+    const attachmentDebug: Array<{ name: string; included: boolean; reason?: string }> = [];
+    if (threadRow && threadRow.accountId && (threadRow.attachments ?? []).length > 0) {
+      const conns = await getAllZohoConnections();
+      const conn = conns.find((c) => c.accountId === threadRow!.accountId) ?? null;
+      if (conn) {
+        const messageId = (() => {
+          const idx = threadRow!.threadId.indexOf(":");
+          return idx >= 0 ? threadRow!.threadId.slice(idx + 1) : threadRow!.threadId;
+        })();
+        let folderId = threadRow.folderId;
+        if (!folderId) {
+          folderId = await findMessageFolderId(conn, messageId);
+        }
+        if (folderId) {
+          let totalBytes = 0;
+          for (const att of threadRow.attachments) {
+            if (aiAttachments.length >= MAX_ATTACHMENT_COUNT) {
+              attachmentDebug.push({ name: att.name, included: false, reason: "attachment count cap reached" });
+              continue;
+            }
+            const mime = inferAttachmentMime(att.name, att.type);
+            if (!mime) {
+              attachmentDebug.push({ name: att.name, included: false, reason: "unsupported type" });
+              continue;
+            }
+            if (att.size != null && att.size > MAX_ATTACHMENT_BYTES) {
+              attachmentDebug.push({ name: att.name, included: false, reason: "too large" });
+              continue;
+            }
+            try {
+              const dl = await downloadAttachment(conn, messageId, att.attachmentId, folderId);
+              if (dl.buffer.byteLength > MAX_ATTACHMENT_BYTES) {
+                attachmentDebug.push({ name: att.name, included: false, reason: "too large after download" });
+                continue;
+              }
+              if (totalBytes + dl.buffer.byteLength > MAX_TOTAL_ATTACHMENT_BYTES) {
+                attachmentDebug.push({ name: att.name, included: false, reason: "total payload cap reached" });
+                continue;
+              }
+              totalBytes += dl.buffer.byteLength;
+              aiAttachments.push({
+                mediaType: mime,
+                base64: dl.buffer.toString("base64"),
+                name: att.name,
+              });
+              attachmentDebug.push({ name: att.name, included: true });
+            } catch (e) {
+              req.log.warn({ err: e, attachment: att.name }, "Failed to download attachment for AI extraction");
+              attachmentDebug.push({ name: att.name, included: false, reason: "download failed" });
+            }
+          }
+        }
+      }
+    }
+
+    if (!emailBody && aiAttachments.length === 0) {
       res.status(400).json({
-        error: "No email body available for this RFQ.",
+        error: "No email body or readable attachments available for this RFQ.",
         zohoLink: rfq.emailThreadId ? `https://mail.zoho.com` : null,
       });
       return;
@@ -49,10 +138,10 @@ router.post("/rfq/:id/extract-products", async (req, res) => {
 
     const system = `You are a procurement assistant for Lumina Supplies, a B2B laboratory supplies company in Riyadh, Saudi Arabia.
 
-Extract all laboratory/scientific products mentioned in the email below.
+Extract all laboratory/scientific products mentioned in the email AND in any attached documents (PDFs, images of quote sheets, spec sheets, photos of products).
 Return ONLY a valid JSON array. No explanation, no markdown, just the JSON array.
 
-For each product, also estimate a confidence level (high/medium/low) based on how clearly the item is described.
+For each product, also estimate a confidence level (high/medium/low) based on how clearly the item is described and where it was found.
 
 Format:
 [
@@ -62,16 +151,29 @@ Format:
     "brand": "<brand name or null>",
     "quantity": "<quantity and unit or null>",
     "specifications": "<any specs or null>",
+    "source": "body|attachment",
     "extraction_confidence": "high|medium|low"
   }
 ]
 
-If no products are found, return an empty array: []`;
+De-duplicate products that appear in both the email body and an attachment.
+If no products are found, return an empty array: [].`;
+
+    // Allow more tokens when attachments are involved since they can yield
+    // many more line items than a typical email body.
+    const maxTokens = aiAttachments.length > 0
+      ? Math.max(AI_MAX_TOKENS.PRODUCT_EXTRACTION, 2000)
+      : AI_MAX_TOKENS.PRODUCT_EXTRACTION;
+
+    const userMessage = emailBody.trim().length > 0
+      ? `Email body:\n\n${emailBody}\n\n${aiAttachments.length > 0 ? `Also examine the ${aiAttachments.length} attached file(s) above (${aiAttachments.map((a) => a.name).join(", ")}).` : ""}`
+      : `Examine the ${aiAttachments.length} attached file(s) above (${aiAttachments.map((a) => a.name).join(", ")}) and extract all products.`;
 
     const { text, model } = await callAI({
       system,
-      userMessage: emailBody,
-      maxTokens: AI_MAX_TOKENS.PRODUCT_EXTRACTION,
+      userMessage,
+      maxTokens,
+      attachments: aiAttachments,
     });
 
     const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -86,6 +188,7 @@ If no products are found, return an empty array: []`;
       brand?: string;
       quantity?: string;
       specifications?: string;
+      source?: string;
       extraction_confidence?: string;
     }>;
 
@@ -113,13 +216,17 @@ If no products are found, return an empty array: []`;
           brand: p.brand ?? null,
           quantity: p.quantity ?? null,
           specifications: p.specifications ?? null,
-          attachmentType: "body" as const,
+          // Map AI-reported source to the schema's attachment_type enum
+          // (body | pdf | image | excel). We can only know "pdf" vs "image"
+          // when the AI signals "attachment"; default to "pdf" since most
+          // quote sheets are PDFs and excel parsing isn't supported here.
+          attachmentType: (p.source === "attachment" ? "pdf" : "body") as "body" | "pdf" | "image",
           extractionConfidence: (p.extraction_confidence ?? "medium") as "high" | "medium" | "low",
         })),
       )
       .returning();
 
-    res.json({ products: inserted, model });
+    res.json({ products: inserted, model, attachmentsAnalyzed: attachmentDebug });
   } catch (err) {
     req.log.error({ err }, "Product extraction failed");
     res.status(500).json({ error: String(err) });

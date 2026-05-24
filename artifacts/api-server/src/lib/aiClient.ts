@@ -13,12 +13,23 @@ export const AI_MODELS = {
 
 export type AIModel = (typeof AI_MODELS)[keyof typeof AI_MODELS];
 
+type ClaudeContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+  | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } };
+
 interface ClaudeRequest {
   model: string;
   max_tokens: number;
   system?: string;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: Array<{ role: "user" | "assistant"; content: string | ClaudeContentBlock[] }>;
 }
+
+export type AIAttachment = {
+  mediaType: string;     // e.g. image/png, application/pdf
+  base64: string;        // base64-encoded bytes
+  name?: string;
+};
 
 interface ClaudeResponse {
   content: Array<{ type: string; text: string }>;
@@ -41,18 +52,43 @@ export async function callClaude(opts: {
   userMessage: string;
   maxTokens: number;
   model?: AIModel;
+  attachments?: AIAttachment[];
 }): Promise<string> {
   const apiKey = getApiKey();
   const model = opts.model ?? AI_MODELS.CLAUDE;
+
+  // Build user content: any attachments (images / PDFs) first, then a text block.
+  let userContent: string | ClaudeContentBlock[] = opts.userMessage;
+  if (opts.attachments && opts.attachments.length > 0) {
+    const blocks: ClaudeContentBlock[] = [];
+    for (const a of opts.attachments) {
+      if (a.mediaType === "application/pdf") {
+        blocks.push({
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: a.base64 },
+        });
+      } else if (a.mediaType.startsWith("image/")) {
+        blocks.push({
+          type: "image",
+          source: { type: "base64", media_type: a.mediaType, data: a.base64 },
+        });
+      }
+    }
+    blocks.push({ type: "text", text: opts.userMessage });
+    userContent = blocks;
+  }
 
   const body: ClaudeRequest = {
     model,
     max_tokens: opts.maxTokens,
     system: opts.system,
-    messages: [{ role: "user", content: opts.userMessage }],
+    messages: [{ role: "user", content: userContent }],
   };
 
-  logger.info({ model, maxTokens: opts.maxTokens }, "Calling Claude API");
+  logger.info(
+    { model, maxTokens: opts.maxTokens, attachmentCount: opts.attachments?.length ?? 0 },
+    "Calling Claude API",
+  );
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -82,6 +118,7 @@ export async function callAI(opts: {
   userMessage: string;
   maxTokens: number;
   model?: AIModel;
+  attachments?: AIAttachment[];
 }): Promise<{ text: string; model: string }> {
   const model = opts.model ?? AI_MODELS.CLAUDE;
   const text = await callClaude({ ...opts, model });
