@@ -16,6 +16,7 @@ import {
   getAllZohoConnections,
   downloadAttachment,
   findMessageFolderId,
+  fetchFullMessage,
 } from "../lib/zohoClient.js";
 
 // Anthropic limits: ~5MB per image, ~32MB per PDF. We cap each file at 4.5MB
@@ -74,7 +75,7 @@ router.post("/rfq/:id/extract-products", async (req, res) => {
     // to Claude so it can extract products from quote sheets / spec docs too.
     const aiAttachments: AIAttachment[] = [];
     const attachmentDebug: Array<{ name: string; included: boolean; reason?: string }> = [];
-    if (threadRow && threadRow.accountId && (threadRow.attachments ?? []).length > 0) {
+    if (threadRow && threadRow.accountId && (threadRow.hasAttachments || (threadRow.attachments ?? []).length > 0)) {
       const conns = await getAllZohoConnections();
       const conn = conns.find((c) => c.accountId === threadRow!.accountId) ?? null;
       if (conn) {
@@ -85,6 +86,35 @@ router.post("/rfq/:id/extract-products", async (req, res) => {
         let folderId = threadRow.folderId;
         if (!folderId) {
           folderId = await findMessageFolderId(conn, messageId);
+          if (folderId) {
+            await db.update(emailThreadsTable).set({ folderId }).where(eq(emailThreadsTable.id, threadRow.id));
+          }
+        }
+        // Lazily materialize the attachment list if it hasn't been fetched yet
+        // (user hasn't opened the email's detail view yet). Without this, the
+        // attachments array stays empty and extraction silently skips them.
+        if (
+          folderId &&
+          (threadRow.attachmentsVerifiedAt == null || (threadRow.attachments ?? []).length === 0)
+        ) {
+          try {
+            const detail = await fetchFullMessage(conn, messageId, folderId);
+            const merged = detail.attachments.length > 0 ? detail.attachments : (threadRow.attachments ?? []);
+            await db
+              .update(emailThreadsTable)
+              .set({
+                bodyHtml: detail.bodyHtml,
+                bodyText: detail.bodyText || threadRow.bodyText,
+                attachments: merged,
+                hasAttachments: merged.length > 0 || threadRow.hasAttachments,
+                attachmentsVerifiedAt: new Date(),
+              })
+              .where(eq(emailThreadsTable.id, threadRow.id));
+            threadRow = { ...threadRow, attachments: merged, bodyHtml: detail.bodyHtml };
+            if (!emailBody && detail.bodyText) emailBody = detail.bodyText;
+          } catch (e) {
+            req.log.warn({ err: e, threadId: threadRow.id }, "Failed to lazy-fetch attachments for extraction");
+          }
         }
         if (folderId) {
           let totalBytes = 0;
