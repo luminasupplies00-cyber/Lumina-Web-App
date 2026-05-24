@@ -1,0 +1,280 @@
+Bug: Product extraction is not working for email attachments.
+The Extract Products button runs but no products are extracted
+from PDF or Excel attachments.
+
+---
+
+DIAGNOSE FIRST — show me:
+
+1. When Extract Products is clicked, what data is being
+   sent to Claude?
+   - Is it the email body only?
+   - Are attachment contents being fetched and passed?
+   - Show me the exact payload sent to Claude
+
+2. Is there any attachment fetching code at all?
+   - Show me the file where attachments are fetched
+   - What Zoho Mail API endpoint is used to fetch
+     attachment content?
+
+3. For the RFQ emails in the database, do they have
+   attachments recorded?
+   Run: SELECT id, source_email_subject, 
+        attachment_count 
+        FROM rfq_records LIMIT 10;
+   
+   Also: SELECT id, subject, attachments 
+         FROM email_threads 
+         WHERE classification = 'RFQ' LIMIT 10;
+
+4. Show me the exact error if any when extraction runs
+   on an email that has a PDF or Excel attachment
+
+Show me all 4 answers before changing anything.
+
+---
+
+THEN FIX:
+
+The fix requires three separate attachment parsers.
+Implement all three:
+
+---
+
+### FIX 1: ZOHO MAIL ATTACHMENT FETCHING
+
+When Extract Products is triggered for an RFQ, fetch
+all attachments from Zoho Mail before calling Claude.
+
+Zoho Mail API to get attachment content:
+
+Step 1 — Get message details including attachment metadata:
+GET https://mail.zoho.com/api/accounts/{accountId}/messages/{messageId}
+Header: Authorization: Zoho-oauthtoken {access_token}
+
+Response includes attachments array:
+[{
+  "attachmentId": "xxx",
+  "attachmentName": "RFQ_Products.pdf",
+  "attachmentSize": 45000,
+  "attachmentType": "application/pdf"
+}]
+
+Step 2 — Download attachment content:
+GET https://mail.zoho.com/api/accounts/{accountId}/messages/{messageId}/attachments/{attachmentId}
+Header: Authorization: Zoho-oauthtoken {access_token}
+
+Returns raw file bytes.
+
+Implement a function:
+fetchEmailAttachments(accountId, messageId, accessToken)
+→ returns array of { name, type, size, content (Buffer) }
+
+---
+
+### FIX 2: PDF PARSER
+
+Install: pdf-parse or pdfjs-dist
+
+For every PDF attachment:
+1. Pass the Buffer to the PDF parser
+2. Extract raw text content
+3. Clean the text (remove excessive whitespace)
+4. Pass to Claude for product extraction
+
+If PDF has no extractable text (scanned image PDF):
+- Fall back to Claude vision API
+- Pass the PDF pages as base64 images
+- Claude reads the image and extracts products
+- Flag as "image_pdf" with lower confidence
+
+---
+
+### FIX 3: EXCEL PARSER
+
+Install: xlsx (SheetJS)
+
+For every Excel/CSV attachment (.xlsx, .xls, .csv):
+1. Parse all sheets
+2. For each sheet, detect product columns by looking for
+   headers like:
+   - Item, Product, Description, Name, Material
+   - Cat No, Catalogue, SKU, Code, Part Number, Ref
+   - Brand, Manufacturer, Make
+   - Qty, Quantity, Amount, Units
+   - Spec, Specification, Description
+3. Map detected columns to product schema
+4. Return structured product array
+
+If column detection fails:
+- Pass the raw sheet data as text to Claude
+- Let Claude identify the product columns
+- Flag as "excel_unstructured" with medium confidence
+
+---
+
+### FIX 4: IMAGE PARSER
+
+For image attachments (JPG, PNG, TIFF) and
+image-based PDFs:
+
+Use Claude's vision capability:
+- Convert attachment to base64
+- Pass as image_url in Claude message
+- Prompt Claude to extract product table from image
+
+Claude vision API format:
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 800,
+  "messages": [{
+    "role": "user",
+    "content": [
+      {
+        "type": "image",
+        "source": {
+          "type": "base64",
+          "media_type": "image/jpeg",
+          "data": "{base64_content}"
+        }
+      },
+      {
+        "type": "text",
+        "text": "Extract all product items from this image. Return JSON array: [{product_name, catalogue_number, brand, quantity, specifications}]. If no products found return []."
+      }
+    ]
+  }]
+}
+
+---
+
+### FIX 5: EXTRACTION PIPELINE
+
+Build a unified extraction pipeline that:
+
+1. Fetches email body text
+2. Fetches all attachments
+3. For each attachment, routes to correct parser:
+   - .pdf → PDF parser → text → Claude
+   - .xlsx/.xls/.csv → Excel parser → structured → Claude
+   - .jpg/.png/.tiff → Image parser → Claude vision
+   - .docx → Extract text → Claude
+   - Unknown → Skip with warning
+4. Combines results from body + all attachments
+5. De-duplicates products (same cat no = same product)
+6. Assigns confidence per product:
+   - Excel structured = high
+   - PDF text = high
+   - Email body = medium
+   - Image/vision = low
+   - Manual = manual
+7. Returns unified product list
+
+---
+
+### FIX 6: EXTRACTION REVIEW UI UPDATE
+
+Update the extraction review modal to show:
+
+For each product row:
+- Source badge: 
+  EMAIL BODY | PDF | EXCEL | IMAGE | MANUAL
+- Confidence badge:
+  HIGH | MEDIUM | LOW | MANUAL
+- All fields editable
+
+At top of modal show:
+- "Extracted from: Email body + 2 attachments"
+  or "Extracted from: PDF attachment only"
+  or "No attachments found — extracted from email body"
+
+If no products extracted at all:
+- Show: "Could not extract products automatically"
+- Show original email body and attachment list
+- Show "Add Products Manually" button
+- Do not advance RFQ automatically
+
+---
+
+### FIX 7: DATABASE UPDATES
+
+Add to email_threads:
+- has_attachments: boolean
+- attachment_count: integer
+- attachment_names: text[] (array of filenames)
+
+Add to rfq_products:
+- extraction_source: email_body | pdf | excel | image | manual
+- extraction_confidence: high | medium | low | manual
+
+---
+
+### FIX 8: CLAUDE PROMPT FOR PRODUCT EXTRACTION
+
+Use this prompt for all text-based extraction:
+
+SYSTEM:
+Extract all laboratory and scientific product line items
+from the text below.
+
+This is from a B2B laboratory supplies company in Saudi
+Arabia. Products may include:
+- Laboratory equipment and instruments
+- Reagents and chemicals (may have CAS numbers)
+- Consumables and plasticware
+- Glassware
+- Diagnostic kits
+- PPE and safety equipment
+- Scientific instruments
+
+Return ONLY a valid JSON array:
+[{
+  "product_name": "full product name",
+  "catalogue_number": "cat no or part number or null",
+  "brand": "manufacturer or brand name or null",
+  "quantity": "numeric quantity or null",
+  "unit": "unit of measure or null",
+  "specifications": "any specs or null"
+}]
+
+Rules:
+- If a product has a catalogue number, always include it
+- CAS numbers are chemical identifiers — include in
+  catalogue_number field prefixed with "CAS:"
+- If quantity is not mentioned, set to null
+- Do not invent products not in the text
+- If no products found, return []
+- Return ONLY the JSON array, no other text
+
+USER:
+{extracted_text_from_body_or_attachment}
+
+max_tokens: 800
+
+---
+
+IMPLEMENTATION ORDER:
+1. Install pdf-parse and xlsx packages
+2. Build fetchEmailAttachments() function
+3. Build PDF parser function
+4. Build Excel parser function  
+5. Build image/vision parser function
+6. Build unified extraction pipeline
+7. Update extraction review modal with source badges
+8. Update database schema
+9. Test with:
+   - RFQ with PDF attachment
+   - RFQ with Excel attachment
+   - RFQ with no attachment (body only)
+   - RFQ with image attachment
+10. Show extraction results for each test case
+
+---
+
+DONE MEANS:
+1. PDF attachment products are extracted correctly
+2. Excel attachment rows are parsed into product table
+3. Image attachments are read via Claude vision
+4. Extraction review modal shows source per product
+5. Manual fallback works when extraction fails
+6. Confidence badges show correctly per product

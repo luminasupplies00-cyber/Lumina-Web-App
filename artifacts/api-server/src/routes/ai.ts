@@ -18,6 +18,7 @@ import {
   findMessageFolderId,
   fetchFullMessage,
 } from "../lib/zohoClient.js";
+import * as XLSX from "xlsx";
 
 // Anthropic limits: ~5MB per image, ~32MB per PDF. We cap each file at 4.5MB
 // to leave headroom for base64 overhead, and cap the total payload to keep
@@ -28,19 +29,53 @@ const MAX_ATTACHMENT_COUNT = 8;
 // Anthropic-supported image media types only.
 const ANTHROPIC_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
-function inferAttachmentMime(name: string, fallback?: string): string | null {
+type AttachmentKind = "image" | "pdf" | "spreadsheet" | null;
+
+function classifyAttachment(name: string, fallback?: string): { kind: AttachmentKind; mime: string | null } {
   const ext = (name.split(".").pop() ?? "").toLowerCase();
-  if (ext === "pdf") return "application/pdf";
-  if (ext === "png") return "image/png";
-  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-  if (ext === "gif") return "image/gif";
-  if (ext === "webp") return "image/webp";
-  // Trust the Zoho-reported MIME only if it's in the Anthropic allowlist.
+  if (ext === "pdf") return { kind: "pdf", mime: "application/pdf" };
+  if (ext === "png") return { kind: "image", mime: "image/png" };
+  if (ext === "jpg" || ext === "jpeg") return { kind: "image", mime: "image/jpeg" };
+  if (ext === "gif") return { kind: "image", mime: "image/gif" };
+  if (ext === "webp") return { kind: "image", mime: "image/webp" };
+  if (ext === "xlsx" || ext === "xls" || ext === "xlsm" || ext === "csv") {
+    return { kind: "spreadsheet", mime: null };
+  }
   if (fallback) {
     const m = fallback.toLowerCase().split(";")[0]?.trim() ?? "";
-    if (m === "application/pdf" || ANTHROPIC_IMAGE_MIMES.has(m)) return m;
+    if (m === "application/pdf") return { kind: "pdf", mime: m };
+    if (ANTHROPIC_IMAGE_MIMES.has(m)) return { kind: "image", mime: m };
+    if (
+      m === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      m === "application/vnd.ms-excel" ||
+      m === "text/csv"
+    ) {
+      return { kind: "spreadsheet", mime: null };
+    }
   }
-  return null;
+  return { kind: null, mime: null };
+}
+
+// Parse an .xlsx/.xls/.csv buffer into a compact text representation that
+// Claude can read as part of the user message.
+function spreadsheetToText(buffer: Buffer, filename: string): string {
+  const wb = XLSX.read(buffer, { type: "buffer" });
+  const parts: string[] = [];
+  for (const sheetName of wb.SheetNames) {
+    const sheet = wb.Sheets[sheetName];
+    if (!sheet) continue;
+    const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false, strip: true });
+    const trimmed = csv.trim();
+    if (!trimmed) continue;
+    parts.push(`--- Sheet: ${sheetName} ---\n${trimmed}`);
+  }
+  if (parts.length === 0) return `(${filename}: empty spreadsheet)`;
+  // Hard cap on text length to keep prompts small.
+  const joined = parts.join("\n\n");
+  const MAX_CHARS = 60_000;
+  return joined.length > MAX_CHARS
+    ? `${joined.slice(0, MAX_CHARS)}\n…(truncated — file too large)`
+    : joined;
 }
 
 const router = Router();
@@ -71,9 +106,12 @@ router.post("/rfq/:id/extract-products", async (req, res) => {
       emailBody = threadRow?.bodyText ?? threadRow?.snippet ?? "";
     }
 
-    // Fetch supported attachments (PDFs, images) from the thread and pass them
-    // to Claude so it can extract products from quote sheets / spec docs too.
+    // Fetch supported attachments (PDFs, images, spreadsheets) from the thread
+    // and pass them to Claude so it can extract products from quote sheets /
+    // spec docs too. PDFs/images go as native multimodal blocks; spreadsheets
+    // (.xlsx/.xls/.csv) are parsed locally to text and appended to the prompt.
     const aiAttachments: AIAttachment[] = [];
+    const spreadsheetTexts: Array<{ name: string; text: string }> = [];
     const attachmentDebug: Array<{ name: string; included: boolean; reason?: string }> = [];
     if (threadRow && threadRow.accountId && (threadRow.hasAttachments || (threadRow.attachments ?? []).length > 0)) {
       const conns = await getAllZohoConnections();
@@ -118,33 +156,49 @@ router.post("/rfq/:id/extract-products", async (req, res) => {
         }
         if (folderId) {
           let totalBytes = 0;
+          // Spreadsheets are typically larger raw but parse down to small text,
+          // so allow a higher per-file size cap for them.
+          const SPREADSHEET_MAX_BYTES = 15_000_000;
           for (const att of threadRow.attachments) {
-            if (aiAttachments.length >= MAX_ATTACHMENT_COUNT) {
+            if (aiAttachments.length + spreadsheetTexts.length >= MAX_ATTACHMENT_COUNT) {
               attachmentDebug.push({ name: att.name, included: false, reason: "attachment count cap reached" });
               continue;
             }
-            const mime = inferAttachmentMime(att.name, att.type);
-            if (!mime) {
+            const { kind, mime } = classifyAttachment(att.name, att.type);
+            if (!kind) {
               attachmentDebug.push({ name: att.name, included: false, reason: "unsupported type" });
               continue;
             }
-            if (att.size != null && att.size > MAX_ATTACHMENT_BYTES) {
+            const perFileCap = kind === "spreadsheet" ? SPREADSHEET_MAX_BYTES : MAX_ATTACHMENT_BYTES;
+            if (att.size != null && att.size > perFileCap) {
               attachmentDebug.push({ name: att.name, included: false, reason: "too large" });
               continue;
             }
             try {
               const dl = await downloadAttachment(conn, messageId, att.attachmentId, folderId);
-              if (dl.buffer.byteLength > MAX_ATTACHMENT_BYTES) {
+              if (dl.buffer.byteLength > perFileCap) {
                 attachmentDebug.push({ name: att.name, included: false, reason: "too large after download" });
                 continue;
               }
+              if (kind === "spreadsheet") {
+                try {
+                  const text = spreadsheetToText(dl.buffer, att.name);
+                  spreadsheetTexts.push({ name: att.name, text });
+                  attachmentDebug.push({ name: att.name, included: true });
+                } catch (e) {
+                  req.log.warn({ err: e, attachment: att.name }, "Spreadsheet parse failed");
+                  attachmentDebug.push({ name: att.name, included: false, reason: "spreadsheet parse failed" });
+                }
+                continue;
+              }
+              // PDF or image — send as native multimodal block.
               if (totalBytes + dl.buffer.byteLength > MAX_TOTAL_ATTACHMENT_BYTES) {
                 attachmentDebug.push({ name: att.name, included: false, reason: "total payload cap reached" });
                 continue;
               }
               totalBytes += dl.buffer.byteLength;
               aiAttachments.push({
-                mediaType: mime,
+                mediaType: mime!,
                 base64: dl.buffer.toString("base64"),
                 name: att.name,
               });
@@ -158,7 +212,7 @@ router.post("/rfq/:id/extract-products", async (req, res) => {
       }
     }
 
-    if (!emailBody && aiAttachments.length === 0) {
+    if (!emailBody && aiAttachments.length === 0 && spreadsheetTexts.length === 0) {
       res.status(400).json({
         error: "No email body or readable attachments available for this RFQ.",
         zohoLink: rfq.emailThreadId ? `https://mail.zoho.com` : null,
@@ -189,15 +243,29 @@ Format:
 De-duplicate products that appear in both the email body and an attachment.
 If no products are found, return an empty array: [].`;
 
-    // Allow more tokens when attachments are involved since they can yield
-    // many more line items than a typical email body.
-    const maxTokens = aiAttachments.length > 0
-      ? Math.max(AI_MAX_TOKENS.PRODUCT_EXTRACTION, 2000)
+    // Allow many more tokens when attachments are involved — quote sheets can
+    // contain 50+ line items and a truncated JSON array will fail to parse.
+    const hasAnyAttachment = aiAttachments.length > 0 || spreadsheetTexts.length > 0;
+    const maxTokens = hasAnyAttachment
+      ? 8000
       : AI_MAX_TOKENS.PRODUCT_EXTRACTION;
 
-    const userMessage = emailBody.trim().length > 0
-      ? `Email body:\n\n${emailBody}\n\n${aiAttachments.length > 0 ? `Also examine the ${aiAttachments.length} attached file(s) above (${aiAttachments.map((a) => a.name).join(", ")}).` : ""}`
-      : `Examine the ${aiAttachments.length} attached file(s) above (${aiAttachments.map((a) => a.name).join(", ")}) and extract all products.`;
+    const messageParts: string[] = [];
+    if (emailBody.trim().length > 0) {
+      messageParts.push(`Email body:\n\n${emailBody}`);
+    }
+    if (aiAttachments.length > 0) {
+      messageParts.push(
+        `Also examine the ${aiAttachments.length} attached file(s) above (${aiAttachments.map((a) => a.name).join(", ")}).`,
+      );
+    }
+    for (const s of spreadsheetTexts) {
+      messageParts.push(`Spreadsheet attachment "${s.name}" contents (CSV):\n\n${s.text}`);
+    }
+    if (messageParts.length === 0) {
+      messageParts.push("Extract products from the attached files above.");
+    }
+    const userMessage = messageParts.join("\n\n");
 
     const { text, model } = await callAI({
       system,
