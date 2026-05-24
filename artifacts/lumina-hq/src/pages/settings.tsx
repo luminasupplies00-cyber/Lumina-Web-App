@@ -45,8 +45,78 @@ export default function Settings() {
       </div>
 
       <ZohoAccountsCard />
+      <DefaultSendersCard />
       <AISettings />
     </div>
+  );
+}
+
+// ─── Default Senders Card ─────────────────────────────────────────────────────
+// Lets the user pick which connected Zoho account is the default sender for
+// supplier outreach. Stored under the free-form settings key
+// DEFAULT_SUPPLIER_EMAIL_ACCOUNT (value = accountLabel).
+function DefaultSendersCard() {
+  const { data: accountsData, isLoading: loadingAccounts } = useGetZohoAccounts();
+  const { data: settingsData, isLoading: loadingSettings } = useGetSettings();
+  const updateSettings = useUpdateSettings();
+
+  const accounts = accountsData?.accounts ?? [];
+  const writableAccounts = accounts.filter((a: any) => a.hasWriteScope);
+  const currentDefault = (settingsData?.settings as Record<string, string> | undefined)?.[
+    "DEFAULT_SUPPLIER_EMAIL_ACCOUNT"
+  ] ?? "";
+
+  const handleChange = (label: string) => {
+    updateSettings.mutate(
+      { data: { DEFAULT_SUPPLIER_EMAIL_ACCOUNT: label } },
+      {
+        onSuccess: () => toast.success(`Default supplier sender set to "${label}"`),
+        onError: () => toast.error("Failed to save default sender"),
+      },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Default Senders</CardTitle>
+        <CardDescription className="mt-1">
+          Pick which Zoho account is pre-selected when sending supplier outreach emails.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loadingAccounts || loadingSettings ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : accounts.length === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            Connect a Zoho account above to choose a default sender.
+          </div>
+        ) : writableAccounts.length === 0 ? (
+          <div className="text-sm text-amber-400">
+            None of your Zoho accounts have send permission yet — reconnect one above to grant it.
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 max-w-md">
+            <label className="text-sm font-medium shrink-0">Supplier outreach from:</label>
+            <Select value={currentDefault} onValueChange={handleChange}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Pick an account…" />
+              </SelectTrigger>
+              <SelectContent>
+                {writableAccounts.map((a: any) => (
+                  <SelectItem key={a.id} value={a.accountLabel}>
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium">{a.accountLabel}</span>
+                      <span className="text-muted-foreground text-xs">— {a.email}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

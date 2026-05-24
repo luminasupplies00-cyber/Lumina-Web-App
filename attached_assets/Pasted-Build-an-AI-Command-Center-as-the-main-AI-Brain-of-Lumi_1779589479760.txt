@@ -1,0 +1,402 @@
+Build an AI Command Center as the main AI Brain of
+Lumina HQ. This is a persistent, trainable AI assistant
+that understands Lumina Supplies business context and
+can be commanded to do anything within the app.
+
+---
+
+## WHAT IT IS
+
+A dedicated AI Brain page and a floating command bar
+accessible from every page in the app.
+
+It is NOT a chatbot.
+It is NOT a generic assistant.
+It is a business-specific AI operator that knows
+Lumina Supplies, knows your workflow, knows your
+suppliers, knows your customers, and executes real
+actions inside the app.
+
+---
+
+## PART 1: FLOATING COMMAND BAR
+
+Available on every page via:
+- Keyboard shortcut: CMD+K or CTRL+K
+- Floating button: bottom right corner of every page
+  Icon: brain or command symbol
+  Label: "AI Command"
+
+When opened:
+- Full-width modal or slide-up panel
+- Large text input at top
+- Recent commands below
+- Suggested commands below that
+
+User types a natural language command and presses Enter.
+AI interprets and executes or responds.
+
+Examples of commands it must handle:
+
+DRAFT COMMANDS:
+"Draft a supplier email for the KFSH RFQ"
+"Write a follow-up for the quote sent to RAMSys 4 days ago"
+"Draft a reply to the Merck pricing email"
+"Write a professional apology for the delayed quotation"
+"Draft a supplier RFQ for centrifuge tubes, 50ml, qty 500"
+
+FIND COMMANDS:
+"Show me all unanswered RFQs from this week"
+"Which suppliers have not responded in 48 hours"
+"Find the quote I sent to King Fahad Hospital"
+"Show overdue tasks assigned to Asha"
+"Which RFQs are stuck in sourcing"
+
+ACTION COMMANDS:
+"Move the KFSH RFQ to comparing stage"
+"Mark the Glassco quote as responded"
+"Assign the SFDA task to Eman"
+"Create a ClickUp task for SFDA registration follow-up"
+"Snooze the newsletter emails for 7 days"
+
+ANALYSIS COMMANDS:
+"What is the status of my pipeline today"
+"Which customers have sent RFQs this month"
+"How many quotes are awaiting customer response"
+"What should I focus on today"
+"Summarize this week's supplier activity"
+
+TRAINING COMMANDS:
+"Remember: always address Merck as Merck KGaA"
+"Remember: our payment terms are Net 30"
+"Remember: for glassware always contact Glassco first"
+"Remember: Asha handles all procurement emails"
+"Remember: our standard markup is 35%"
+"Set default follow-up time to 3 days"
+
+---
+
+## PART 2: AI BRAIN PAGE
+
+New page in sidebar: /ai-brain
+Sidebar label: "AI Brain" under AI section
+
+Page sections:
+
+### SECTION 1: COMMAND INTERFACE
+
+Full command input at top of page.
+Same as floating bar but full-page context.
+Shows full conversation history for the session.
+
+### SECTION 2: BUSINESS MEMORY
+
+This is where you train the AI.
+
+Subsections:
+
+A. COMPANY PROFILE (pre-filled, editable):
+   - Company name: Lumina Supplies
+   - Legal name: Success Lines Company
+   - Location: Riyadh, Saudi Arabia
+   - Business type: B2B laboratory supplies distribution
+   - Primary market: Saudi Arabia
+   - Customer types: hospitals, labs, universities,
+     research centers, industrial facilities
+   - Business model: back-order, markup-based pricing
+   - Default markup: 35% (editable)
+   - Default payment terms: Net 30 (editable)
+   - Default quote validity: 30 days (editable)
+   - Default follow-up period: 3 days (editable)
+   - Currency: SAR (primary), USD (supplier quotes)
+   - Language: English (primary), Arabic (supported)
+
+B. TEAM MEMBERS (editable list):
+   Each team member:
+   - Name
+   - Role
+   - Email
+   - Responsibilities (text field)
+   - Default assignment rules
+   
+   Pre-filled:
+   - Eman Ali | General Manager | eman@... |
+     Handles: operations, coordination, admin tasks
+   - Asha Maru | Procurement Manager | asha@... |
+     Handles: supplier sourcing, purchasing, POs
+   - Sales Team | Sales |
+     Handles: customer communication, quotations
+
+C. EMAIL TEMPLATES (trainable):
+   User can add and edit templates the AI should use:
+   
+   Template types:
+   - Supplier RFQ outreach
+   - Customer quotation
+   - Follow-up to customer
+   - Follow-up to supplier
+   - Order confirmation
+   - Apology / delay notice
+   - Introduction email
+   
+   Each template has:
+   - Template name
+   - Purpose description
+   - Example email (user pastes or writes)
+   - "Use this style" instruction
+   - Active/inactive toggle
+   
+   When AI drafts an email, it checks the relevant
+   template and matches the style, tone, and structure.
+
+D. SUPPLIER PREFERENCES (trainable):
+   Rules the AI should follow for supplier selection:
+   - "For glassware, always try Glassco first"
+   - "Avoid supplier X — slow response"
+   - "For Merck products, contact authorized distributor"
+   - User adds rules as plain text
+   - AI applies these when suggesting suppliers
+
+E. CUSTOMER RULES (trainable):
+   - "KFSH requires formal quotation format"
+   - "Saudi Aramco needs VAT breakdown separately"
+   - "Always CC sales@lumina-supplies.com for hospital accounts"
+   - User adds rules as plain text
+
+F. AI BEHAVIOR SETTINGS:
+   - Default email tone: Professional / Formal / Friendly
+   - Language: English / Arabic / Both
+   - Email signature (editable text area)
+   - Include company footer in emails: Yes/No
+   - Auto-classify emails: Yes/No
+   - Auto-create RFQ from classified email: Yes/No
+   - Markup default: % input
+   - Landed cost buffer: % input
+
+### SECTION 3: AI ACTIVITY LOG
+
+Shows history of all AI actions taken:
+- Timestamp
+- Command or trigger
+- Action taken
+- Result (success/failed/draft generated)
+- Token usage
+
+Filter by: date, type, success/failed
+
+### SECTION 4: AI PERFORMANCE
+
+Simple metrics:
+- Total emails classified this month
+- Classification accuracy (based on manual corrections)
+- Total drafts generated
+- Drafts used vs edited vs discarded
+- Avg time saved per RFQ (estimated)
+- Most common commands
+
+---
+
+## PART 3: HOW AI USES BUSINESS MEMORY
+
+Every AI call in the app must include the business
+memory context.
+
+Build a context builder function:
+buildAIContext() → returns a context string
+
+This function reads from the AI Brain settings and
+constructs a system context like:
+
+"You are the AI brain for Lumina Supplies, a B2B
+laboratory and scientific supplies company in Riyadh,
+Saudi Arabia.
+
+Company context:
+- Default markup: 35%
+- Payment terms: Net 30
+- Quote validity: 30 days
+- Primary currency: SAR
+
+Team:
+- Eman Ali (GM): handles operations and admin
+- Asha Maru (Procurement): handles suppliers and POs
+- Sales Team: handles customer communication
+
+Email style rules:
+- Always use formal professional English
+- Address customers by their company name first time
+- Include quote validity and payment terms in every quote
+- Sign off as: Best regards, [Name] | Lumina Supplies
+
+Supplier preferences:
+- For glassware, contact Glassco first
+- [other rules the user has added]
+
+Customer rules:
+- [rules the user has added]"
+
+Inject this context as the system prompt prefix for
+EVERY AI call in the app:
+- Email triage
+- Product extraction
+- Supplier draft
+- Customer quote draft
+- Follow-up draft
+- CEO Brief
+- Next Actions
+- Command interface
+
+---
+
+## PART 4: COMMAND EXECUTION ENGINE
+
+When a command is received, the AI must:
+
+1. UNDERSTAND the intent:
+   - Is it a DRAFT request?
+   - Is it a FIND/QUERY request?
+   - Is it an ACTION request?
+   - Is it a TRAINING/MEMORY update?
+   - Is it an ANALYSIS request?
+
+2. GATHER context:
+   - Query the database for relevant data
+   - If command mentions an RFQ, supplier, or customer
+     by name, look them up first
+
+3. EXECUTE:
+   - DRAFT → generate and show in modal
+   - FIND → query DB and show results
+   - ACTION → execute with confirmation
+   - TRAINING → save to AI Brain memory
+   - ANALYSIS → query DB and generate AI summary
+
+4. RESPOND with:
+   - Result or draft
+   - Source items referenced
+   - Actions taken or available
+   - Follow-up suggestions
+
+Command response format in the UI:
+┌─────────────────────────────────────────────┐
+│ You: "Draft a follow-up for KFSH quote"     │
+├─────────────────────────────────────────────┤
+│ AI Brain:                                   │
+│                                             │
+│ Found: Quote sent to KFSH on May 21         │
+│ Days since: 3 days (follow-up threshold)    │
+│                                             │
+│ Draft:                                      │
+│ ┌─────────────────────────────────────────┐ │
+│ │ Subject: Follow-up: Quotation QT-000253 │ │
+│ │ [editable draft body here...]           │ │
+│ └─────────────────────────────────────────┘ │
+│                                             │
+│ [Copy] [Send via Zoho Mail] [Edit]          │
+│                                             │
+│ Also: 2 other quotes awaiting response      │
+│ [Show all] [Draft follow-ups for all]       │
+└─────────────────────────────────────────────┘
+
+---
+
+## PART 5: TRAINING COMMANDS
+
+When user says "Remember: ..." the AI must:
+
+1. Parse the instruction
+2. Identify which memory category it belongs to:
+   - Email style → templates
+   - Supplier rule → supplier preferences
+   - Customer rule → customer rules
+   - Team rule → team assignments
+   - Business setting → company profile
+3. Save to the correct section in ai_brain_memory table
+4. Confirm: "Got it. I'll remember that [supplier X]
+   should be contacted first for [category Y]."
+
+Memory is persistent across sessions.
+Memory is used in every AI call via buildAIContext().
+
+---
+
+## DATABASE ADDITIONS
+
+ai_brain_memory:
+- id
+- category: company_profile | team | template |
+            supplier_rule | customer_rule | behavior
+- key (text)
+- value (text)
+- created_at
+- updated_at
+- is_active boolean
+
+ai_commands_log:
+- id
+- command_text
+- intent_detected
+- context_used (summarized)
+- response_type: draft | query | action | memory | analysis
+- response_summary
+- tokens_used
+- execution_time_ms
+- success boolean
+- error_message nullable
+- created_at
+
+ai_email_templates:
+- id
+- template_name
+- template_type
+- purpose
+- example_content (text)
+- style_instructions (text)
+- is_active boolean
+- created_at
+- updated_at
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Create ai_brain_memory, ai_commands_log,
+   ai_email_templates tables
+2. Build buildAIContext() function
+3. Inject context into ALL existing AI calls
+4. Build AI Brain page with all 4 sections
+5. Build company profile form (pre-filled)
+6. Build team members management
+7. Build email templates manager
+8. Build supplier and customer rules editor
+9. Build AI behavior settings
+10. Build command execution engine (intent detection)
+11. Build floating command bar (CMD+K)
+12. Wire up DRAFT commands
+13. Wire up FIND/QUERY commands
+14. Wire up ACTION commands
+15. Wire up TRAINING/MEMORY commands
+16. Wire up ANALYSIS commands
+17. Build command response UI with action buttons
+18. Build AI activity log
+19. Build AI performance metrics
+20. Test all command types with real data
+
+---
+
+## DONE MEANS
+
+1. CMD+K opens command bar from any page
+2. "Draft supplier email for KFSH RFQ" generates
+   correct draft with KFSH context
+3. "What should I focus on today" returns ranked
+   action list from real data
+4. "Remember: always CC sales for hospital accounts"
+   saves to memory and is used in future drafts
+5. "Show unanswered RFQs from this week" queries DB
+   and returns correct results
+6. All AI features use business memory context
+7. Email templates are used when generating drafts
+8. AI activity log shows all commands and results
+9. Team assignment rules are followed automatically
+10. Company profile settings affect all AI outputs

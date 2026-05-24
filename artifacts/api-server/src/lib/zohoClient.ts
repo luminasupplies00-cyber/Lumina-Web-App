@@ -428,16 +428,24 @@ export async function trashMessage(
 export type SendMessageInput = {
   toAddress: string;     // comma-separated
   ccAddress?: string;
+  bccAddress?: string;
   subject: string;
   content: string;
   mailFormat?: "html" | "plaintext";
   fromAddress?: string;  // defaults to conn.email
+  attachments?: Array<{ attachmentId: string }>;
+};
+
+/** Result returned by Zoho's `POST /messages` endpoint (the parts we care about). */
+export type SendMessageResult = {
+  messageId?: string;
+  raw: unknown;
 };
 
 export async function sendMessage(
   conn: DecryptedZohoConnection,
   input: SendMessageInput,
-): Promise<unknown> {
+): Promise<SendMessageResult> {
   const body: Record<string, unknown> = {
     fromAddress: input.fromAddress ?? conn.email,
     toAddress: input.toAddress,
@@ -446,7 +454,76 @@ export async function sendMessage(
     mailFormat: input.mailFormat ?? "html",
   };
   if (input.ccAddress) body["ccAddress"] = input.ccAddress;
-  return zohoPostForConnection(conn, `/accounts/${conn.accountId}/messages`, body);
+  if (input.bccAddress) body["bccAddress"] = input.bccAddress;
+  if (input.attachments && input.attachments.length > 0) {
+    body["attachments"] = input.attachments;
+  }
+  const raw = (await zohoPostForConnection(
+    conn,
+    `/accounts/${conn.accountId}/messages`,
+    body,
+  )) as { data?: { messageId?: string } } | undefined;
+  const messageId = raw?.data?.messageId;
+  return { messageId, raw };
+}
+
+/**
+ * Upload a file to Zoho Mail and return its attachmentId, suitable for
+ * passing to sendMessage(). Zoho's docs: POST /accounts/{accountId}/messages/attachments
+ * with multipart form data; the field name must be `attach`.
+ */
+export async function uploadZohoAttachment(
+  conn: DecryptedZohoConnection,
+  file: { buffer: Buffer; filename: string; contentType?: string },
+): Promise<{ attachmentId: string; storeName?: string; attachmentName?: string }> {
+  const token = await refreshZohoTokenIfNeeded(conn);
+  const form = new FormData();
+  // Copy into a fresh ArrayBuffer-backed Uint8Array — Node's lib.dom types
+  // require BlobPart-compatible (non-Shared) ArrayBuffers here.
+  const view = new Uint8Array(file.buffer.byteLength);
+  view.set(file.buffer);
+  const blob = new Blob([view], {
+    type: file.contentType ?? "application/octet-stream",
+  });
+  form.append("attach", blob, file.filename);
+
+  const url = `https://mail.zoho.com/api/accounts/${conn.accountId}/messages/attachments?uploadType=multipart`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      // NOTE: do NOT set Content-Type — let fetch set the multipart boundary.
+    },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 401 || /OAUTH_SCOPE_MISMATCH|INVALID_OAUTHTOKEN/i.test(text)) {
+      throw new Error(`Zoho scope insufficient for attachment upload — reconnect required (${res.status})`);
+    }
+    throw new Error(`Zoho attachment upload failed ${res.status}: ${text}`);
+  }
+
+  type AttachResp = {
+    data?: { attachmentPath?: string; storeName?: string; attachmentName?: string } | Array<{
+      attachmentPath?: string;
+      storeName?: string;
+      attachmentName?: string;
+    }>;
+  };
+  const json = (await res.json()) as AttachResp;
+  const item = Array.isArray(json.data) ? json.data[0] : json.data;
+  const attachmentId = item?.attachmentPath;
+  if (!attachmentId) {
+    throw new Error(`Zoho attachment upload returned no attachmentPath: ${JSON.stringify(json)}`);
+  }
+  const result: { attachmentId: string; storeName?: string; attachmentName?: string } = {
+    attachmentId,
+  };
+  if (item?.storeName) result.storeName = item.storeName;
+  if (item?.attachmentName) result.attachmentName = item.attachmentName;
+  return result;
 }
 
 export async function downloadAttachment(

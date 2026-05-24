@@ -63,6 +63,8 @@ import type {
   RfqUpdate,
   SendEmailInput,
   SendThreadReply200,
+  SendZohoEmailInput,
+  SendZohoEmailResult,
   SettingsInput,
   SettingsResponse,
   StageUpdate,
@@ -774,6 +776,77 @@ export const useDisconnectZoho = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDisconnectZohoMutationOptions(options));
+    }
+
+export const getSendZohoEmailUrl = () => {
+
+
+
+
+  return `/api/mail/zoho/send`
+}
+
+/**
+ * @summary Send a supplier email via Zoho Mail API (with optional attachment) and update tracking
+ */
+export const sendZohoEmail = async (sendZohoEmailInput: SendZohoEmailInput, options?: RequestInit): Promise<SendZohoEmailResult> => {
+
+  return customFetch<SendZohoEmailResult>(getSendZohoEmailUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      sendZohoEmailInput,)
+  }
+);}
+
+
+
+
+export const getSendZohoEmailMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendZohoEmail>>, TError,{data: BodyType<SendZohoEmailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendZohoEmail>>, TError,{data: BodyType<SendZohoEmailInput>}, TContext> => {
+
+const mutationKey = ['sendZohoEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendZohoEmail>>, {data: BodyType<SendZohoEmailInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendZohoEmail(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendZohoEmailMutationResult = NonNullable<Awaited<ReturnType<typeof sendZohoEmail>>>
+    export type SendZohoEmailMutationBody = BodyType<SendZohoEmailInput>
+    export type SendZohoEmailMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a supplier email via Zoho Mail API (with optional attachment) and update tracking
+ */
+export const useSendZohoEmail = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendZohoEmail>>, TError,{data: BodyType<SendZohoEmailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendZohoEmail>>,
+        TError,
+        {data: BodyType<SendZohoEmailInput>},
+        TContext
+      > => {
+      return useMutation(getSendZohoEmailMutationOptions(options));
     }
 
 export const getRunSyncUrl = () => {

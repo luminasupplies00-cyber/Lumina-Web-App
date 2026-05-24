@@ -28,6 +28,13 @@ export interface SupplierContactRecord {
   followUpSentAt?: string | null;
   /** @nullable */
   emailDraftId?: number | null;
+  /**
+     * null = manual/clipboard | "zoho_api" = sent through Zoho Mail API
+     * @nullable
+     */
+  emailSentVia?: string | null;
+  /** @nullable */
+  zohoMessageId?: string | null;
   /** @nullable */
   notes?: string | null;
   /**

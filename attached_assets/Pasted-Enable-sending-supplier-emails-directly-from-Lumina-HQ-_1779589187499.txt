@@ -1,0 +1,259 @@
+Enable sending supplier emails directly from Lumina HQ
+via Zoho Mail API — no more copy/paste to Zoho Mail.
+
+---
+
+## WHAT TO BUILD
+
+Replace the current "Copy + Open Zoho Mail" button with
+a real "Send via Zoho Mail" button that sends the email
+directly through the connected Zoho Mail account.
+
+---
+
+## ZOHO MAIL SEND API
+
+Endpoint:
+POST https://mail.zoho.com/api/accounts/{accountId}/messages
+
+Headers:
+Authorization: Zoho-oauthtoken {access_token}
+Content-Type: application/json
+
+Body for plain text + HTML email:
+{
+  "fromAddress": "faraz@lumina-supplies.com",
+  "toAddress": "supplier@example.com",
+  "ccAddress": "",
+  "bccAddress": "supplier2@example.com,supplier3@example.com",
+  "subject": "RFQ — Laboratory Products — Lumina Supplies",
+  "content": "HTML email body here",
+  "mailFormat": "html",
+  "attachments": []
+}
+
+For emails with Excel attachment:
+- First upload the file to Zoho Mail
+- Then reference attachment ID in the send call
+
+Zoho Mail attachment upload:
+POST https://mail.zoho.com/api/accounts/{accountId}/messages/attachments
+Headers:
+  Authorization: Zoho-oauthtoken {access_token}
+  Content-Type: multipart/form-data
+Body: form-data with file field
+
+Returns: { attachmentId: "xxx" }
+
+Then include in send body:
+"attachments": [{ "attachmentId": "xxx" }]
+
+---
+
+## WHICH ZOHO ACCOUNT TO SEND FROM
+
+User must be able to choose which connected Zoho Mail
+account to send from.
+
+In the supplier draft modal, add:
+"Send from:" dropdown showing all connected accounts:
+- Owner — faraz@lumina-supplies.com
+- Sales — sales@lumina-supplies.com
+- Procurement — procurement@lumina-supplies.com
+
+Default: Procurement account for supplier emails
+(most logical — procurement sends to suppliers)
+
+Store the selected account preference in settings:
+default_supplier_email_account = "procurement"
+
+---
+
+## SEND FLOW FOR SEPARATE EMAILS (MODE A)
+
+When multiple suppliers selected and Mode A (separate):
+
+1. Show send queue:
+   "Ready to send 3 supplier emails"
+   
+   Queue list:
+   ✓ Glassco — glassco@example.com
+   ✓ Merck KGaA — merck@example.com  
+   ✓ VWR — vwr@example.com
+
+2. "Send from:" account selector
+   
+3. "Review & Send All" button
+
+4. For each supplier in queue:
+   - Show email preview modal:
+     To: supplier email
+     Subject: (editable)
+     Body: (editable textarea — last chance to review)
+     Attachment: Excel file if applicable
+     [Send This Email] [Skip] [Cancel All]
+   
+5. When "Send This Email" clicked:
+   - Call Zoho Mail send API
+   - Show sending spinner
+   - On success:
+     → Mark supplier as CONTACTED in rfq_supplier_contacts
+     → Record contacted_at timestamp
+     → Show: "✓ Sent to Glassco"
+     → Auto-advance to next supplier in queue
+   - On error:
+     → Show error message
+     → "Retry" or "Skip" options
+     → Log error to sync log
+
+6. After all sent:
+   - Show summary: "3 emails sent successfully"
+   - RFQ stage: if was NEW → move to SOURCING
+   - Show supplier tracker updated with all contacts
+
+---
+
+## SEND FLOW FOR BCC MODE (MODE B)
+
+1. Show preview:
+   To: first supplier
+   BCC: all other suppliers
+   Subject: (editable)
+   Body: (editable)
+   Attachment: Excel if applicable
+
+2. "Send from:" account selector
+
+3. "Send Email" button
+
+4. On success:
+   - Mark all BCC'd suppliers as CONTACTED
+   - Record contacted_at for all
+   - Show: "✓ Email sent to 3 suppliers"
+
+---
+
+## OAUTH SCOPE CHECK
+
+Before showing Send button, verify the connected
+Zoho Mail account has send permission.
+
+Required scope: ZohoMail.messages.ALL or
+ZohoMail.messages.CREATE
+
+Check stored token scopes when rendering the modal.
+
+If scope missing:
+- Hide "Send via Zoho Mail" button
+- Show: "Reconnect Zoho Mail to enable sending"
+- Show "Reconnect" button that re-runs OAuth with
+  correct scopes including send permission
+- Keep "Copy to clipboard" as fallback
+
+If scope present:
+- Show "Send via Zoho Mail" button (primary action)
+- Keep "Copy" as secondary option
+
+---
+
+## SENT EMAIL TRACKING
+
+After successful send via Zoho Mail API:
+
+1. Store in ai_drafts:
+   - sent_at timestamp
+   - sent_from_account (which Zoho account)
+   - sent_to (recipient email)
+   - zoho_message_id (returned by API)
+   - send_status: sent | failed | skipped
+
+2. Update rfq_supplier_contacts:
+   - contacted_at = now()
+   - status = CONTACTED
+   - email_sent_via = zoho_api
+   - zoho_message_id = returned ID
+
+3. Show in RFQ card supplier tracker:
+   - "Sent via Zoho Mail" badge
+   - Sent timestamp
+   - Which account it was sent from
+
+---
+
+## ERROR HANDLING
+
+Handle these Zoho Mail send errors:
+
+401 — Token expired → auto refresh and retry once
+403 — Insufficient scope → show reconnect prompt
+429 — Rate limit → wait 2 seconds and retry once
+500 — Zoho server error → show error, offer retry
+Network error → show error, offer retry
+
+Never silently fail a send.
+Always show the user if an email failed to send.
+
+---
+
+## UI CHANGES
+
+In supplier draft modal:
+- Replace "Copy + Open Zoho Mail" with:
+  Primary button: "Send via Zoho Mail ↑"
+  Secondary link: "Or copy to clipboard"
+
+- Add "Send from:" account dropdown above send button
+
+- Add sending progress indicator:
+  "Sending 2 of 3..." with spinner
+
+- Add sent confirmation per supplier:
+  Green checkmark + "Sent at 09:23 AM"
+
+---
+
+## SETTINGS ADDITION
+
+In Settings → Application Configuration add:
+"Default Supplier Email Account"
+Dropdown: [Procurement ▼] [Owner] [Sales]
+
+This sets which Zoho account is pre-selected when
+drafting supplier emails.
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Check and update OAuth scopes for send permission
+2. Build Zoho Mail send API function on backend:
+   sendZohoEmail(accountId, accessToken, emailData)
+3. Build attachment upload function for Excel files
+4. Add "Send from" account selector to draft modal
+5. Build send queue UI for Mode A (separate emails)
+6. Build send confirmation flow per email in queue
+7. Build single send flow for Mode B (BCC)
+8. Add sent tracking to ai_drafts and rfq_supplier_contacts
+9. Add error handling for all failure scenarios
+10. Add scope check with reconnect prompt
+11. Update Settings with default account preference
+12. Test end to end:
+    - Send to one supplier
+    - Send to multiple suppliers (separate)
+    - Send with Excel attachment
+    - Handle send failure
+
+---
+
+## DONE MEANS
+
+1. "Send via Zoho Mail" button visible in supplier modal
+2. Correct Zoho account selectable before sending
+3. Each supplier email sends successfully via API
+4. Excel attachment uploads and attaches correctly
+5. Supplier marked as CONTACTED after send
+6. Supplier tracker shows sent timestamp
+7. Failed sends show error with retry option
+8. Scope check works — reconnect shown if needed
+9. Sent emails appear in Zoho Mail Sent folder
+10. RFQ moves to SOURCING after first supplier contacted

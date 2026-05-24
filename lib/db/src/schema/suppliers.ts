@@ -110,6 +110,8 @@ export const rfqSupplierContactsTable = pgTable("rfq_supplier_contacts", {
   replyThreadId: integer("reply_thread_id"), // → emailThreadsTable.id
   followUpSentAt: timestamp("follow_up_sent_at", { withTimezone: true }),
   emailDraftId: integer("email_draft_id"), // → aiDraftsTable.id
+  emailSentVia: text("email_sent_via"), // null = manual/clipboard | "zoho_api" = sent via API
+  zohoMessageId: text("zoho_message_id"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

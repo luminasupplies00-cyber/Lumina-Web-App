@@ -117,6 +117,35 @@ export const DisconnectZohoResponse = zod.object({
 
 
 /**
+ * @summary Send a supplier email via Zoho Mail API (with optional attachment) and update tracking
+ */
+export const SendZohoEmailBody = zod.object({
+  "accountId": zod.number().describe('zoho_connections.id'),
+  "to": zod.string().describe('Comma-separated To address(es)'),
+  "cc": zod.string().optional(),
+  "bcc": zod.string().optional().describe('Comma-separated BCC addresses (used for the \"single BCC\" outreach mode)'),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "mailFormat": zod.enum(['html', 'plaintext']).optional(),
+  "rfqId": zod.number(),
+  "draftId": zod.number().optional().describe('ai_drafts.id — updated to send_status=sent on success'),
+  "contactIds": zod.array(zod.number()).optional().describe('rfq_supplier_contacts ids to mark as contacted on success'),
+  "attachment": zod.object({
+  "filename": zod.string(),
+  "contentType": zod.string().optional(),
+  "base64": zod.string().describe('Base64-encoded file contents')
+}).optional()
+})
+
+export const SendZohoEmailResponse = zod.object({
+  "ok": zod.boolean(),
+  "zohoMessageId": zod.string().nullish(),
+  "sentFromAccount": zod.string().nullish(),
+  "sentAt": zod.string().nullish()
+})
+
+
+/**
  * @summary Trigger Zoho inbox sync and AI triage for ALL accounts
  */
 export const RunSyncResponse = zod.object({
@@ -517,6 +546,8 @@ export const GetRfqsResponse = zod.object({
   "replyThreadId": zod.number().nullish(),
   "followUpSentAt": zod.string().nullish(),
   "emailDraftId": zod.number().nullish(),
+  "emailSentVia": zod.string().nullish().describe('null = manual\/clipboard | \"zoho_api\" = sent through Zoho Mail API'),
+  "zohoMessageId": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "hoursSinceContact": zod.number().nullish().describe('Computed on read — for stale (>48h) detection')
 })).optional(),
@@ -1093,6 +1124,8 @@ export const ListSupplierContactsResponse = zod.object({
   "replyThreadId": zod.number().nullish(),
   "followUpSentAt": zod.string().nullish(),
   "emailDraftId": zod.number().nullish(),
+  "emailSentVia": zod.string().nullish().describe('null = manual\/clipboard | \"zoho_api\" = sent through Zoho Mail API'),
+  "zohoMessageId": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "hoursSinceContact": zod.number().nullish().describe('Computed on read — for stale (>48h) detection')
 }))
@@ -1148,6 +1181,8 @@ export const UpdateSupplierContactStatusResponse = zod.object({
   "replyThreadId": zod.number().nullish(),
   "followUpSentAt": zod.string().nullish(),
   "emailDraftId": zod.number().nullish(),
+  "emailSentVia": zod.string().nullish().describe('null = manual\/clipboard | \"zoho_api\" = sent through Zoho Mail API'),
+  "zohoMessageId": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "hoursSinceContact": zod.number().nullish().describe('Computed on read — for stale (>48h) detection')
 })

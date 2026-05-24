@@ -171,6 +171,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResponse"
 
+  /mail/zoho/send:
+    post:
+      operationId: sendZohoEmail
+      tags: [zoho]
+      summary: Send a supplier email via Zoho Mail API (with optional attachment) and update tracking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendZohoEmailInput"
+      responses:
+        "200":
+          description: Email sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendZohoEmailResult"
+
   /sync/run:
     post:
       operationId: runSync
@@ -1691,11 +1710,76 @@ components:
           type: ["string", "null"]
         emailDraftId:
           type: ["integer", "null"]
+        emailSentVia:
+          type: ["string", "null"]
+          description: null = manual/clipboard | "zoho_api" = sent through Zoho Mail API
+        zohoMessageId:
+          type: ["string", "null"]
         notes:
           type: ["string", "null"]
         hoursSinceContact:
           type: ["number", "null"]
           description: Computed on read — for stale (>48h) detection
+
+    SendZohoEmailAttachment:
+      type: object
+      required: [filename, base64]
+      properties:
+        filename:
+          type: string
+        contentType:
+          type: string
+        base64:
+          type: string
+          description: Base64-encoded file contents
+
+    SendZohoEmailInput:
+      type: object
+      required: [accountId, to, subject, body, rfqId]
+      properties:
+        accountId:
+          type: integer
+          description: zoho_connections.id
+        to:
+          type: string
+          description: Comma-separated To address(es)
+        cc:
+          type: string
+        bcc:
+          type: string
+          description: Comma-separated BCC addresses (used for the "single BCC" outreach mode)
+        subject:
+          type: string
+        body:
+          type: string
+        mailFormat:
+          type: string
+          enum: [html, plaintext]
+        rfqId:
+          type: integer
+        draftId:
+          type: integer
+          description: ai_drafts.id — updated to send_status=sent on success
+        contactIds:
+          type: array
+          items:
+            type: integer
+          description: rfq_supplier_contacts ids to mark as contacted on success
+        attachment:
+          $ref: "#/components/schemas/SendZohoEmailAttachment"
+
+    SendZohoEmailResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        zohoMessageId:
+          type: ["string", "null"]
+        sentFromAccount:
+          type: ["string", "null"]
+        sentAt:
+          type: ["string", "null"]
 
     SupplierContactInput:
       type: object

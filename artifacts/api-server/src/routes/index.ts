@@ -8,6 +8,7 @@ import rfqRouter from "./rfq.js";
 import aiRouter from "./ai.js";
 import suppliersRouter from "./suppliers.js";
 import supplierContactsRouter from "./supplierContacts.js";
+import mailSendRouter from "./mailSend.js";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(rfqRouter);
 router.use(aiRouter);
 router.use(suppliersRouter);
 router.use(supplierContactsRouter);
+router.use(mailSendRouter);
 
 export default router;

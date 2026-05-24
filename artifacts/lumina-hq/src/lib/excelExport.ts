@@ -16,11 +16,11 @@ export type RfqExcelMeta = {
   deadline?: string | null;
 };
 
-/**
- * Generate a supplier-ready Excel workbook listing all products in an RFQ.
- * Triggers download in the browser. Returns the suggested filename.
- */
-export function downloadRfqExcel(meta: RfqExcelMeta, products: RfqExcelProduct[]): string {
+/** Build the Excel workbook in memory — shared by download + attach flows. */
+function buildRfqWorkbook(meta: RfqExcelMeta, products: RfqExcelProduct[]): {
+  workbook: XLSX.WorkBook;
+  filename: string;
+} {
   const wb = XLSX.utils.book_new();
 
   const header = [
@@ -77,6 +77,34 @@ export function downloadRfqExcel(meta: RfqExcelMeta, products: RfqExcelProduct[]
     .replace(/[^a-z0-9]+/gi, "_")
     .slice(0, 30);
   const filename = `RFQ_${meta.rfqId}_${safeClient}.xlsx`;
-  XLSX.writeFile(wb, filename);
+  return { workbook: wb, filename };
+}
+
+/**
+ * Generate a supplier-ready Excel workbook and trigger a browser download.
+ * Returns the suggested filename.
+ */
+export function downloadRfqExcel(meta: RfqExcelMeta, products: RfqExcelProduct[]): string {
+  const { workbook, filename } = buildRfqWorkbook(meta, products);
+  XLSX.writeFile(workbook, filename);
   return filename;
+}
+
+/**
+ * Generate the same workbook and return it as a base64-encoded .xlsx blob,
+ * suitable for shipping to the API server as a Zoho Mail attachment payload.
+ */
+export function buildRfqExcelBase64(meta: RfqExcelMeta, products: RfqExcelProduct[]): {
+  filename: string;
+  base64: string;
+  contentType: string;
+} {
+  const { workbook, filename } = buildRfqWorkbook(meta, products);
+  // `XLSX.write` returns a binary string when type is "base64".
+  const base64 = XLSX.write(workbook, { type: "base64", bookType: "xlsx" }) as string;
+  return {
+    filename,
+    base64,
+    contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  };
 }

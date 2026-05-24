@@ -305,6 +305,13 @@ export interface SupplierContactRecord {
   followUpSentAt?: string | null;
   /** @nullable */
   emailDraftId?: number | null;
+  /**
+     * null = manual/clipboard | "zoho_api" = sent through Zoho Mail API
+     * @nullable
+     */
+  emailSentVia?: string | null;
+  /** @nullable */
+  zohoMessageId?: string | null;
   /** @nullable */
   notes?: string | null;
   /**
@@ -320,6 +327,50 @@ export type RfqWithProducts = RfqRecord & {
   /** Number of CONTACTED contacts with no response > 48h */
   noResponseCount?: number;
 };
+
+export interface SendZohoEmailAttachment {
+  filename: string;
+  contentType?: string;
+  /** Base64-encoded file contents */
+  base64: string;
+}
+
+export type SendZohoEmailInputMailFormat = typeof SendZohoEmailInputMailFormat[keyof typeof SendZohoEmailInputMailFormat];
+
+
+export const SendZohoEmailInputMailFormat = {
+  html: 'html',
+  plaintext: 'plaintext',
+} as const;
+
+export interface SendZohoEmailInput {
+  /** zoho_connections.id */
+  accountId: number;
+  /** Comma-separated To address(es) */
+  to: string;
+  cc?: string;
+  /** Comma-separated BCC addresses (used for the "single BCC" outreach mode) */
+  bcc?: string;
+  subject: string;
+  body: string;
+  mailFormat?: SendZohoEmailInputMailFormat;
+  rfqId: number;
+  /** ai_drafts.id — updated to send_status=sent on success */
+  draftId?: number;
+  /** rfq_supplier_contacts ids to mark as contacted on success */
+  contactIds?: number[];
+  attachment?: SendZohoEmailAttachment;
+}
+
+export interface SendZohoEmailResult {
+  ok: boolean;
+  /** @nullable */
+  zohoMessageId?: string | null;
+  /** @nullable */
+  sentFromAccount?: string | null;
+  /** @nullable */
+  sentAt?: string | null;
+}
 
 export interface SupplierContactInput {
   supplierId?: number;
