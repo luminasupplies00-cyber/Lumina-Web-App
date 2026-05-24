@@ -1,0 +1,403 @@
+Major upgrade to the Supplier Sourcing workflow.
+This covers 6 new capabilities for the supplier email
+drafting and tracking system.
+
+---
+
+## CAPABILITY 1: EXCEL PRODUCT LIST IN SUPPLIER EMAIL
+
+When drafting a supplier sourcing email, the product
+list must be exportable as an Excel file attachment,
+not just a table in the email body.
+
+Requirements:
+
+1. Generate an Excel file (.xlsx) from the extracted
+   product list using the SheetJS (xlsx) library
+
+2. Excel file structure:
+   Sheet name: "RFQ Products"
+   
+   Columns:
+   A: # (row number)
+   B: Product Name / Description
+   C: Catalogue Number / Part Number
+   D: Brand / Manufacturer
+   E: Quantity Required
+   F: Unit of Measure
+   G: Specifications / Notes
+   H: Unit Price (SAR) — blank, for supplier to fill
+   I: Unit Price (USD) — blank, for supplier to fill
+   J: Lead Time (Days) — blank, for supplier to fill
+   K: MOQ — blank, for supplier to fill
+   L: Availability (Yes/No/Partial) — blank for supplier
+   M: Remarks — blank, for supplier to fill
+
+3. File naming:
+   RFQ_{customer_company}_{date}_{rfq_id_short}.xlsx
+   Example: RFQ_KFSH_2026-05-24_RFQ001.xlsx
+
+4. In the supplier draft modal:
+   - Show "Attach Excel Product List" toggle (ON by default)
+   - When ON: show download button for the Excel file
+   - Show: "📎 RFQ_KFSH_2026-05-24_RFQ001.xlsx will be
+     attached when you send via Zoho Mail"
+   - "Download Excel" button downloads the file locally
+   - "Copy Email + Open Zoho Mail" button opens Zoho Mail
+     compose with the draft email body pre-filled
+   - User manually attaches the downloaded Excel file
+     before sending (we cannot auto-attach via API
+     without Zoho Files scope — keep it manual for now)
+
+5. Email body should reference the attachment:
+   "Please find attached our RFQ in Excel format for
+   your convenience. Kindly fill in the pricing columns
+   and return at your earliest."
+
+6. Also keep the product table in the email body as
+   a plain text or HTML table so suppliers who cannot
+   open Excel can still read the items.
+
+---
+
+## CAPABILITY 2: AI SUPPLIER SEARCH FROM GOOGLE/WEB
+
+Add an "Find Suppliers" feature that uses AI with web
+browsing to discover relevant suppliers for the products
+in the RFQ.
+
+Requirements:
+
+1. Add "Find Suppliers Online" button on RFQ cards in
+   NEW and SOURCING stages
+
+2. When clicked, show a search modal with:
+   - Search query pre-filled based on extracted products:
+     Example: "laboratory reagents supplier Saudi Arabia"
+     or "HACH instruments distributor Middle East"
+   - User can edit the search query
+   - "Search" button triggers AI web search
+
+3. Use Perplexity sonar-pro for this feature specifically
+   because it has real-time web search capability:
+
+   API call to Perplexity:
+   POST https://api.perplexity.ai/chat/completions
+   {
+     "model": "sonar-pro",
+     "messages": [{
+       "role": "system",
+       "content": "You are a procurement specialist for
+       Lumina Supplies, a B2B laboratory and scientific
+       supplies company in Riyadh, Saudi Arabia.
+       
+       Find relevant suppliers for the given products.
+       For each supplier return:
+       - company name
+       - website URL
+       - email if findable
+       - location/country
+       - why they are relevant
+       - product categories they cover
+       - whether they serve Middle East/Saudi Arabia
+       
+       Return as JSON array of supplier objects.
+       Focus on: authorized distributors, manufacturers,
+       and established lab supplies companies.
+       Prefer suppliers with Middle East presence."
+     }, {
+       "role": "user",
+       "content": "Find suppliers for these products:
+       {product_list}
+       
+       We are based in Riyadh, Saudi Arabia.
+       We need: pricing, availability, lead time.
+       Priority: suppliers serving Saudi Arabia or
+       Middle East region."
+     }],
+     "max_tokens": 1000
+   }
+
+4. Show results as supplier cards:
+   Each card shows:
+   - Company name
+   - Website (clickable link)
+   - Email (if found)
+   - Location
+   - Relevance reason
+   - "Browse Website" button (opens in new tab)
+   - "Add to My Suppliers" button
+   - "Select for This RFQ" button (checkbox)
+
+5. "Browse Website" behavior:
+   When clicked, use Perplexity to summarize the
+   supplier website:
+   
+   Query: "What products does {website_url} sell?
+   Do they serve Saudi Arabia? What are their
+   contact details? Are they an authorized distributor?"
+   
+   Show a brief AI summary card:
+   "This supplier offers X, Y, Z products. They serve
+   the Middle East. Contact: email@supplier.com"
+
+6. Show confidence note:
+   "Results powered by AI web search. Always verify
+   supplier legitimacy before placing orders."
+
+---
+
+## CAPABILITY 3: SELECT SUPPLIERS FROM SUPPLIER LIST
+
+When drafting a supplier email, show the supplier
+database alongside the draft.
+
+Requirements:
+
+1. Supplier selection panel on the draft modal:
+   Left side (60%): Email draft + Excel download
+   Right side (40%): Supplier selector
+
+2. Supplier selector panel shows:
+   - Search box to filter suppliers
+   - Filter by product category (matches RFQ products)
+   - List of matching suppliers from the database:
+     Each row: checkbox + name + category + last
+     response date + response rate %
+   - "Find Online" button at bottom to trigger
+     Capability 2
+
+3. Smart pre-selection:
+   Based on product categories in the RFQ, auto-check
+   suppliers that match those categories and are marked
+   as preferred
+
+4. Selected suppliers shown as chips above the email:
+   [✓ Glassco] [✓ Merck KGaA] [✓ Sigma-Aldrich]
+   Click chip to deselect
+
+5. "Add New Supplier" button → opens quick-add form:
+   - Name, email, company, category
+   - Saves to supplier database
+   - Auto-selects for this RFQ
+
+---
+
+## CAPABILITY 4: BCC SELECTED SUPPLIERS
+
+When multiple suppliers are selected, the email must
+support BCC so each supplier receives the email
+without seeing other recipients.
+
+Requirements:
+
+1. When 2+ suppliers selected, show:
+   "Each supplier will receive a separate email"
+   OR
+   "All suppliers will be BCC'd on one email"
+   Toggle between the two modes.
+
+2. MODE A — Separate emails (recommended, default):
+   - One email generated per supplier
+   - Each email addressed: To: {supplier_email}
+   - Subject includes supplier name or is generic
+   - Product list is identical for all
+   - "Send All" → opens Zoho Mail compose for each
+     supplier one by one
+   - Shows queue: "Email 1 of 3: Glassco"
+     Copy + Open Zoho Mail → next → "Email 2 of 3"
+   - User copies and sends each one manually
+
+3. MODE B — Single email BCC:
+   - One email with all suppliers in BCC
+   - To: field shows "Suppliers" or first supplier
+   - "Copy + Open Zoho Mail" button pre-fills:
+     To: first supplier
+     BCC: all other suppliers
+   - Warning: "Suppliers may see BCC headers on
+     some email clients. Separate emails are safer."
+
+4. Track which suppliers were contacted per RFQ:
+   Store in rfq_supplier_contacts table:
+   - rfq_id
+   - supplier_id
+   - supplier_email
+   - contacted_at
+   - email_mode (separate | bcc)
+   - email_draft_id
+
+---
+
+## CAPABILITY 5: SUPPLIER RESPONSE TRACKING
+
+Track whether each contacted supplier responded
+or did not respond to the sourcing email.
+
+Requirements:
+
+1. For each RFQ in SOURCING stage, show a
+   "Supplier Tracker" section on the card:
+   
+   Table:
+   Supplier | Contacted | Status | Response Time | Action
+   
+   Status options:
+   - CONTACTED — email sent, awaiting response
+   - RESPONDED — supplier replied with quote
+   - NO RESPONSE — X days, no reply
+   - DECLINED — supplier cannot fulfill
+   - PARTIAL — can supply some items only
+
+2. How to update status:
+   a. MANUAL: "Mark Responded" / "Mark No Response"
+      buttons per supplier row
+   b. AUTOMATIC: When AI classifies an incoming email
+      as SUPPLIER_REPLY and links it to this RFQ,
+      automatically mark that supplier as RESPONDED
+
+3. Automatic linking logic:
+   When a new email is classified as SUPPLIER_REPLY:
+   - Check if sender email matches any supplier in
+     rfq_supplier_contacts for open RFQs
+   - If match found:
+     → Mark supplier status as RESPONDED
+     → Link the reply email to the RFQ
+     → Show notification: "Supplier reply received
+       from Glassco for RFQ #001"
+     → Prompt: "Log quote from this reply?"
+     → If yes: open fast-entry quote form
+       pre-filled from the reply email
+
+4. No Response alerts:
+   - After 48 hours, flag supplier as "NO RESPONSE"
+     automatically
+   - Show on RFQ card: "2 suppliers have not responded
+     in 48h"
+   - Suggest action: "Send follow-up or find alternative"
+   - "Draft Follow-up" button per unresponsive supplier
+
+5. Response rate tracking:
+   - Track per supplier: how often they respond
+   - Update supplier performance metrics:
+     response_rate_% = responses / contacts × 100
+   - Show in supplier list and performance modal
+
+---
+
+## CAPABILITY 6: SUPPLIER FOLLOW-UP DRAFTS
+
+For suppliers who have not responded in 48h:
+
+1. Show "Draft Follow-up" button per supplier in tracker
+
+2. Generate a short professional follow-up:
+   SYSTEM: Write a brief, polite follow-up email to a
+   supplier who has not responded to a pricing request
+   sent {days} days ago. Maximum 3 sentences.
+   Professional but with gentle urgency.
+   
+   USER: Supplier: {supplier_name}
+   Original request date: {contacted_at}
+   Products requested: {product_count} items
+   
+   max_tokens: 150
+
+3. Show in modal with Copy + Open Zoho Mail button
+
+---
+
+## DATABASE ADDITIONS
+
+rfq_supplier_contacts:
+- id
+- rfq_id
+- supplier_id (nullable — for suppliers not in DB)
+- supplier_name
+- supplier_email
+- contacted_at
+- contact_mode: separate | bcc
+- status: contacted | responded | no_response |
+          declined | partial
+- responded_at (nullable)
+- response_time_hours (computed)
+- reply_thread_id (link to email_threads if auto-detected)
+- follow_up_sent_at (nullable)
+- notes
+
+Update suppliers table:
+- total_contacts integer default 0
+- total_responses integer default 0  
+- response_rate_percent decimal computed
+- avg_response_time_hours decimal
+- last_contacted_at timestamp
+- last_responded_at timestamp
+
+---
+
+## UI LAYOUT FOR SUPPLIER DRAFT MODAL
+
+Current: Simple modal with email draft + copy button
+
+New layout (full-screen modal or slide-over):
+
+┌─────────────────────────────────────────────────────┐
+│  DRAFT SUPPLIER EMAIL — RFQ from KFSH               │
+│                                                     │
+│  ┌─────────────────────┐  ┌──────────────────────┐  │
+│  │   EMAIL DRAFT       │  │  SELECT SUPPLIERS    │  │
+│  │   (60% width)       │  │  (40% width)         │  │
+│  │                     │  │                      │  │
+│  │  Subject: [edit]    │  │  [Search suppliers]  │  │
+│  │                     │  │  Filter: [category]  │  │
+│  │  Body: [editable]   │  │                      │  │
+│  │                     │  │  ☑ Glassco           │  │
+│  │  📎 Excel attached  │  │  ☑ Merck KGaA        │  │
+│  │  [Download Excel]   │  │  ☐ Sigma-Aldrich     │  │
+│  │                     │  │  ☐ VWR International │  │
+│  │  MODE: [Separate ▼] │  │                      │  │
+│  │                     │  │  [+ Find Online]     │  │
+│  │  QUEUE:             │  │  [+ Add New]         │  │
+│  │  1. Glassco ✓       │  │                      │  │
+│  │  2. Merck →         │  │  Selected: 2         │  │
+│  │                     │  │  [Glassco ×]         │  │
+│  │  [Copy + Send Next] │  │  [Merck KGaA ×]      │  │
+│  └─────────────────────┘  └──────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Excel generation for product list (SheetJS)
+2. Excel download button in supplier draft modal
+3. Supplier selector panel in draft modal
+4. Smart pre-selection based on categories
+5. rfq_supplier_contacts table and tracking
+6. Separate email queue (Mode A)
+7. BCC mode (Mode B)
+8. Supplier response tracker UI on RFQ cards
+9. Auto-link supplier reply emails to RFQ
+10. 48h no-response flag and alert
+11. Supplier follow-up draft per unresponsive supplier
+12. Perplexity web search for finding suppliers
+13. Website summary via Perplexity
+14. Add to supplier database from search results
+15. Update supplier performance metrics on response
+
+---
+
+## DONE MEANS
+
+1. Excel file downloads with correct product columns
+2. Supplier selector shows matching suppliers by category
+3. Smart pre-selection works based on product categories
+4. Separate email mode shows one email per supplier
+5. BCC mode generates one email with all suppliers BCC'd
+6. Supplier tracker shows on SOURCING stage RFQ cards
+7. Marking supplier as responded works manually
+8. Supplier reply email auto-links to correct RFQ
+9. 48h no-response flag appears automatically
+10. Follow-up draft generates per unresponsive supplier
+11. Perplexity search returns real supplier suggestions
+12. Adding supplier from search results works
+13. Supplier response rate updates automatically
