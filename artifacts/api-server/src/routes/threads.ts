@@ -612,8 +612,12 @@ router.get("/threads/:id/attachments/:attId", async (req, res) => {
     const att = (thread.attachments ?? []).find((a) => a.attachmentId === attId);
     const dl = await downloadAttachment(conn, extractMessageId(thread.threadId), attId);
     const filename = att?.name ?? dl.filename ?? "attachment";
+    const inline = req.query["inline"] === "1" || req.query["inline"] === "true";
     res.setHeader("Content-Type", dl.contentType);
-    res.setHeader("Content-Disposition", `attachment; filename="${filename.replace(/"/g, "")}"`);
+    const disposition = inline ? "inline" : "attachment";
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename.replace(/"/g, "")}"`);
+    // Allow inline viewing in a new browser tab (PDFs, images, etc.)
+    res.setHeader("Cache-Control", "private, max-age=300");
     res.send(dl.buffer);
   } catch (err) {
     req.log.error({ err }, "Failed to download attachment");

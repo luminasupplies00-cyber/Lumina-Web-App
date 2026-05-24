@@ -37,6 +37,7 @@ import {
   Paperclip,
   AlertTriangle,
   Download,
+  Eye,
   ChevronDown,
   ChevronRight,
   ArrowUpRight,
@@ -198,24 +199,42 @@ function ConversationView({
                     <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                       <Paperclip className="h-3 w-3" /> Attachments ({m.attachments.length})
                     </div>
-                    {m.attachments.map((a) => (
-                      <a
-                        key={a.attachmentId}
-                        href={`${apiBase}/threads/${threadId}/attachments/${a.attachmentId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-between p-1.5 rounded border border-border bg-background/40 hover:bg-muted/40 text-xs"
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
-                          <span className="truncate">{a.name}</span>
-                          {a.size != null && (
-                            <span className="text-muted-foreground shrink-0">{formatBytes(a.size)}</span>
-                          )}
+                    {m.attachments.map((a) => {
+                      const base = `${apiBase}/threads/${threadId}/attachments/${a.attachmentId}`;
+                      return (
+                        <div
+                          key={a.attachmentId}
+                          className="flex items-center justify-between gap-2 p-1.5 rounded border border-border bg-background/40 hover:bg-muted/40 text-xs"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span className="truncate">{a.name}</span>
+                            {a.size != null && (
+                              <span className="text-muted-foreground shrink-0">{formatBytes(a.size)}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <a
+                              href={`${base}?inline=1`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border hover:bg-muted/60 text-cyan-400"
+                              title="View in new tab"
+                            >
+                              <Eye className="h-3 w-3" /> View
+                            </a>
+                            <a
+                              href={base}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border hover:bg-muted/60"
+                              title="Download"
+                              download={a.name}
+                            >
+                              <Download className="h-3 w-3" /> Download
+                            </a>
+                          </div>
                         </div>
-                        <Download className="h-3 w-3 text-muted-foreground shrink-0" />
-                      </a>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {m.bodyHtml ? (
@@ -569,24 +588,42 @@ export function EmailDetailSheet({
                       <Paperclip className="h-3 w-3" /> Attachments ({attachments.length})
                     </div>
                     <div className="space-y-1">
-                      {attachments.map((a) => (
-                        <a
-                          key={a.attachmentId}
-                          href={`${apiBase}/threads/${thread.id}/attachments/${a.attachmentId}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center justify-between p-2 rounded border border-border bg-background/40 hover:bg-muted/40 text-sm"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span className="truncate">{a.name}</span>
-                            {a.size != null && (
-                              <span className="text-xs text-muted-foreground shrink-0">{formatBytes(a.size)}</span>
-                            )}
+                      {attachments.map((a) => {
+                        const base = `${apiBase}/threads/${thread.id}/attachments/${a.attachmentId}`;
+                        return (
+                          <div
+                            key={a.attachmentId}
+                            className="flex items-center justify-between gap-2 p-2 rounded border border-border bg-background/40 hover:bg-muted/40 text-sm"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="truncate">{a.name}</span>
+                              {a.size != null && (
+                                <span className="text-xs text-muted-foreground shrink-0">{formatBytes(a.size)}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <a
+                                href={`${base}?inline=1`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-border hover:bg-muted/60 text-xs text-cyan-400"
+                                title="View in new tab"
+                              >
+                                <Eye className="h-3 w-3" /> View
+                              </a>
+                              <a
+                                href={base}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-border hover:bg-muted/60 text-xs"
+                                title="Download"
+                                download={a.name}
+                              >
+                                <Download className="h-3 w-3" /> Download
+                              </a>
+                            </div>
                           </div>
-                          <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        </a>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
