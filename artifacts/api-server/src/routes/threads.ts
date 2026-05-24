@@ -302,7 +302,11 @@ router.get("/threads/:id/full", async (req, res) => {
     // presence of bodyHtml OR a non-empty bodyText (after first fetch) as a
     // cached state. Empty HTML emails (plaintext-only) would otherwise re-fetch
     // every open.
-    const isCached = thread.bodyHtml !== null && thread.bodyHtml !== undefined;
+    // Cache is invalid if hasAttachments was reported true but we stored an
+    // empty attachments array (legacy rows from before the attachmentinfo fix).
+    const storedAtt = (thread.attachments ?? []) as unknown[];
+    const attachmentsCacheStale = thread.hasAttachments === true && storedAtt.length === 0;
+    const isCached = thread.bodyHtml !== null && thread.bodyHtml !== undefined && !attachmentsCacheStale;
     const messageId = extractMessageId(thread.threadId);
 
     // Always ensure the email is marked read on open (covers both cached and
@@ -357,7 +361,10 @@ router.get("/threads/:id/full", async (req, res) => {
         bodyHtml: detail.bodyHtml,
         bodyText: detail.bodyText || thread.bodyText,
         attachments: detail.attachments,
-        hasAttachments: detail.attachments.length > 0,
+        // Preserve a prior positive signal — only flip to false when both
+        // sources agree there are none. This avoids a transient
+        // /attachmentinfo failure clearing the flag and re-poisoning the cache.
+        hasAttachments: detail.attachments.length > 0 || thread.hasAttachments === true,
         isRead: true,
       })
       .where(eq(emailThreadsTable.id, id));

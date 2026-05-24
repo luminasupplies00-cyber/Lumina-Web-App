@@ -252,16 +252,42 @@ export async function fetchFullMessage(
       }>;
     };
   };
-  // Zoho Mail API requires folderId in path AND separate /details + /content
-  // suffixes. /details returns metadata + attachments; /content returns HTML.
+  // Zoho Mail API requires folderId in path AND separate /details, /content and
+  // /attachmentinfo suffixes. /details returns header/metadata; /content
+  // returns HTML; /attachmentinfo returns the attachment list. Some Zoho
+  // accounts/regions also include attachments inside /details, others don't —
+  // so we always merge both.
   const base = `/accounts/${conn.accountId}/folders/${folderId}/messages/${messageId}`;
-  const [detailResp, contentResp] = await Promise.all([
+  type AttachInfo = {
+    data?: {
+      attachments?: NonNullable<Detail["data"]>["attachments"];
+    };
+  };
+  const [detailResp, contentResp, attachResp] = await Promise.all([
     zohoGetForConnection(conn, `${base}/details`) as Promise<Detail>,
     zohoGetForConnection(conn, `${base}/content`).catch(() => ({ data: { content: "" } })) as Promise<{
       data?: { content?: string };
     }>,
+    zohoGetForConnection(conn, `${base}/attachmentinfo`).catch((e: unknown) => {
+      logger.warn({ err: e, base }, "attachmentinfo failed");
+      return { data: { attachments: [] } };
+    }) as Promise<AttachInfo>,
   ]);
-  const data = { ...(detailResp.data ?? {}), content: contentResp.data?.content ?? detailResp.data?.content };
+  const detailAttachments = detailResp.data?.attachments ?? [];
+  const infoAttachments = attachResp.data?.attachments ?? [];
+  // Union-merge by attachmentId/id so we don't drop entries that only appear
+  // in one endpoint's response.
+  const attachById = new Map<string, NonNullable<Detail["data"]>["attachments"] extends (infer U)[] | undefined ? U : never>();
+  for (const a of [...detailAttachments, ...infoAttachments]) {
+    const key = a.attachmentId ?? a.id ?? `${a.attachmentName ?? a.fileName ?? "x"}:${a.attachmentSize ?? a.size ?? ""}`;
+    if (!attachById.has(key)) attachById.set(key, a);
+  }
+  const mergedAttachments = Array.from(attachById.values());
+  const data = {
+    ...(detailResp.data ?? {}),
+    content: contentResp.data?.content ?? detailResp.data?.content,
+    attachments: mergedAttachments,
+  };
   const html = data.content ?? "";
   // Strip HTML for plaintext fallback
   const text = html
