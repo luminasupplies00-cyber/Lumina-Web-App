@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedAIBrainMemory } from "./lib/aiBrainSeed";
+import { startAutoSync } from "./lib/autoSync";
 
 const rawPort = process.env["PORT"];
 
@@ -27,5 +28,10 @@ app.listen(port, (err) => {
   // Seed AI brain memory on first boot (idempotent — no-op when populated).
   seedAIBrainMemory().catch((seedErr) => {
     logger.error({ err: seedErr }, "AI brain seed crashed unexpectedly");
+  });
+
+  // Start the auto-sync scheduler (reads SYNC_INTERVAL_MINUTES from DB).
+  startAutoSync().catch((syncErr) => {
+    logger.error({ err: syncErr }, "Auto-sync scheduler failed to start");
   });
 });

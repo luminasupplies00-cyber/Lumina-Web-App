@@ -91,6 +91,7 @@ import type {
   ThreadsResponse,
   WebsiteSummaryResult,
   ZohoAccountLabelUpdate,
+  ZohoAccountScopes,
   ZohoAuthUrl,
   ZohoStatus
 } from './api.schemas';
@@ -781,6 +782,83 @@ export const useDisconnectZoho = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDisconnectZohoMutationOptions(options));
     }
+
+export const getGetZohoAccountScopesUrl = (accountId: number,) => {
+
+
+
+
+  return `/api/mail/zoho/scopes/${accountId}`
+}
+
+/**
+ * @summary Check the OAuth scopes granted to a connected Zoho account
+ */
+export const getZohoAccountScopes = async (accountId: number, options?: RequestInit): Promise<ZohoAccountScopes> => {
+
+  return customFetch<ZohoAccountScopes>(getGetZohoAccountScopesUrl(accountId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetZohoAccountScopesQueryKey = (accountId: number,) => {
+    return [
+    `/api/mail/zoho/scopes/${accountId}`
+    ] as const;
+    }
+
+
+export const getGetZohoAccountScopesQueryOptions = <TData = Awaited<ReturnType<typeof getZohoAccountScopes>>, TError = ErrorType<void>>(accountId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZohoAccountScopes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetZohoAccountScopesQueryKey(accountId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getZohoAccountScopes>>> = ({ signal }) => getZohoAccountScopes(accountId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(accountId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getZohoAccountScopes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetZohoAccountScopesQueryResult = NonNullable<Awaited<ReturnType<typeof getZohoAccountScopes>>>
+export type GetZohoAccountScopesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Check the OAuth scopes granted to a connected Zoho account
+ */
+
+export function useGetZohoAccountScopes<TData = Awaited<ReturnType<typeof getZohoAccountScopes>>, TError = ErrorType<void>>(
+ accountId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZohoAccountScopes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetZohoAccountScopesQueryOptions(accountId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getSendZohoEmailUrl = () => {
 

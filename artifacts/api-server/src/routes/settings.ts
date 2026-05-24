@@ -60,6 +60,12 @@ router.put("/settings", async (req, res) => {
       }
     }
 
+    // If the sync interval changed, restart the scheduler immediately.
+    if ("SYNC_INTERVAL_MINUTES" in body) {
+      const { restartAutoSync } = await import("../lib/autoSync.js");
+      restartAutoSync().catch((e) => req.log.warn({ err: e }, "restartAutoSync failed"));
+    }
+
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to save settings");

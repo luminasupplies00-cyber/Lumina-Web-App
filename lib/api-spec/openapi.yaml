@@ -173,6 +173,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResponse"
 
+  /mail/zoho/scopes/{accountId}:
+    get:
+      operationId: getZohoAccountScopes
+      tags: [zoho]
+      summary: Check the OAuth scopes granted to a connected Zoho account
+      parameters:
+        - in: path
+          name: accountId
+          required: true
+          schema:
+            type: integer
+          description: zoho_connections.id
+      responses:
+        "200":
+          description: Scope info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZohoAccountScopes"
+        "404":
+          description: Account not found
+
   /mail/zoho/send:
     post:
       operationId: sendZohoEmail
@@ -1412,6 +1434,21 @@ components:
               error:
                 type: string
 
+    AccountSyncError:
+      type: object
+      required: [label, email, error, isAuthError, failedAt]
+      properties:
+        label:
+          type: string
+        email:
+          type: string
+        error:
+          type: string
+        isAuthError:
+          type: boolean
+        failedAt:
+          type: string
+          format: date-time
     SyncStatus:
       type: object
       required: [connected]
@@ -1422,8 +1459,20 @@ components:
           type: ["string", "null"]
         lastSyncedAt:
           type: ["string", "null"]
+          format: date-time
         totalAccounts:
           type: ["integer", "null"]
+        autoSyncEnabled:
+          type: boolean
+        syncIntervalMinutes:
+          type: integer
+        nextSyncAt:
+          type: ["string", "null"]
+          format: date-time
+        accountErrors:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountSyncError"
 
     EmailThread:
       type: object
@@ -1760,6 +1809,17 @@ components:
         hoursSinceContact:
           type: ["number", "null"]
           description: Computed on read — for stale (>48h) detection
+
+    ZohoAccountScopes:
+      type: object
+      required: [hasSendScope]
+      properties:
+        hasSendScope:
+          type: boolean
+          description: True when the account has ZohoMail.messages.ALL or ZohoMail.messages.CREATE scope
+        scope:
+          type: ["string", "null"]
+          description: Raw scope string from the OAuth grant
 
     SendZohoEmailAttachment:
       type: object

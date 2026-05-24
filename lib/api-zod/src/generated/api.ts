@@ -117,6 +117,19 @@ export const DisconnectZohoResponse = zod.object({
 
 
 /**
+ * @summary Check the OAuth scopes granted to a connected Zoho account
+ */
+export const GetZohoAccountScopesParams = zod.object({
+  "accountId": zod.coerce.number().describe('zoho_connections.id')
+})
+
+export const GetZohoAccountScopesResponse = zod.object({
+  "hasSendScope": zod.boolean().describe('True when the account has ZohoMail.messages.ALL or ZohoMail.messages.CREATE scope'),
+  "scope": zod.string().nullish().describe('Raw scope string from the OAuth grant')
+})
+
+
+/**
  * @summary Send a supplier email via Zoho Mail API (with optional attachment) and update tracking
  */
 export const SendZohoEmailBody = zod.object({
@@ -191,8 +204,18 @@ export const RunSyncForAccountResponse = zod.object({
 export const GetSyncStatusResponse = zod.object({
   "connected": zod.boolean(),
   "email": zod.string().nullish(),
-  "lastSyncedAt": zod.string().nullish(),
-  "totalAccounts": zod.number().nullish()
+  "lastSyncedAt": zod.coerce.date().nullish(),
+  "totalAccounts": zod.number().nullish(),
+  "autoSyncEnabled": zod.boolean().optional(),
+  "syncIntervalMinutes": zod.number().optional(),
+  "nextSyncAt": zod.coerce.date().nullish(),
+  "accountErrors": zod.array(zod.object({
+  "label": zod.string(),
+  "email": zod.string(),
+  "error": zod.string(),
+  "isAuthError": zod.boolean(),
+  "failedAt": zod.coerce.date()
+})).optional()
 })
 
 

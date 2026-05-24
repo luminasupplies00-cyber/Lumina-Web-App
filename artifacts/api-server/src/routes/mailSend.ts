@@ -54,6 +54,28 @@ async function loadConnection(id: number): Promise<DecryptedZohoConnection | nul
   };
 }
 
+router.get("/mail/zoho/scopes/:accountId", async (req, res) => {
+  const id = parseInt(req.params["accountId"] ?? "", 10);
+  if (!id || Number.isNaN(id)) {
+    res.status(400).json({ error: "accountId must be an integer" });
+    return;
+  }
+  const rows = await db
+    .select({ scope: zohoConnectionsTable.scope, isActive: zohoConnectionsTable.isActive })
+    .from(zohoConnectionsTable)
+    .where(eq(zohoConnectionsTable.id, id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) {
+    res.status(404).json({ error: "Zoho account not found" });
+    return;
+  }
+  const scope = row.scope ?? "";
+  const hasSendScope =
+    scope.includes("ZohoMail.messages.ALL") || scope.includes("ZohoMail.messages.CREATE");
+  res.json({ hasSendScope, scope: row.scope ?? null });
+});
+
 router.post("/mail/zoho/send", async (req, res) => {
   const body = req.body as SendBody;
 

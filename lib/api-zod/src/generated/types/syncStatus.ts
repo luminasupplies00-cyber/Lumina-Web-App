@@ -5,13 +5,19 @@
  * Lumina HQ API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AccountSyncError } from './accountSyncError';
 
 export interface SyncStatus {
   connected: boolean;
   /** @nullable */
   email?: string | null;
   /** @nullable */
-  lastSyncedAt?: string | null;
+  lastSyncedAt?: Date | null;
   /** @nullable */
   totalAccounts?: number | null;
+  autoSyncEnabled?: boolean;
+  syncIntervalMinutes?: number;
+  /** @nullable */
+  nextSyncAt?: Date | null;
+  accountErrors?: AccountSyncError[];
 }

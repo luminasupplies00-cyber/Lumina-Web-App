@@ -81,6 +81,14 @@ export interface SyncResult {
   accounts?: SyncResultAccountsItem[];
 }
 
+export interface AccountSyncError {
+  label: string;
+  email: string;
+  error: string;
+  isAuthError: boolean;
+  failedAt: string;
+}
+
 export interface SyncStatus {
   connected: boolean;
   /** @nullable */
@@ -89,6 +97,11 @@ export interface SyncStatus {
   lastSyncedAt?: string | null;
   /** @nullable */
   totalAccounts?: number | null;
+  autoSyncEnabled?: boolean;
+  syncIntervalMinutes?: number;
+  /** @nullable */
+  nextSyncAt?: string | null;
+  accountErrors?: AccountSyncError[];
 }
 
 export interface EmailAttachment {
@@ -327,6 +340,16 @@ export type RfqWithProducts = RfqRecord & {
   /** Number of CONTACTED contacts with no response > 48h */
   noResponseCount?: number;
 };
+
+export interface ZohoAccountScopes {
+  /** True when the account has ZohoMail.messages.ALL or ZohoMail.messages.CREATE scope */
+  hasSendScope: boolean;
+  /**
+     * Raw scope string from the OAuth grant
+     * @nullable
+     */
+  scope?: string | null;
+}
 
 export interface SendZohoEmailAttachment {
   filename: string;

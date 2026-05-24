@@ -9,6 +9,7 @@ import {
   useGetSettings,
   useGetZohoAccounts,
   useSendZohoEmail,
+  useUpdateRfqStage,
 } from "@workspace/api-client-react";
 import {
   formatProductBlock,
@@ -58,6 +59,7 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
   const markCopied = useMarkDraftCopied();
   const createSupplier = useCreateSupplier();
   const sendEmail = useSendZohoEmail();
+  const updateStage = useUpdateRfqStage();
 
   const { data: suggested } = useGetSuggestedSuppliers(rfqId);
   const { data: allSuppliers } = useGetSuppliers();
@@ -162,6 +164,25 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
       cancelRef.current = false;
     }
   }, [isOpen]);
+
+  // Auto-advance NEW → SOURCING once at least one email is sent successfully.
+  const sentCountForEffect = sendQueue?.filter((r) => r.status === "sent").length ?? 0;
+  const queueDoneForEffect =
+    sendQueue !== null && sendQueue.every((r) => r.status !== "pending" && r.status !== "sending");
+  useEffect(() => {
+    if (!queueDoneForEffect || sentCountForEffect === 0) return;
+    if (rfq?.stage !== "NEW") return;
+    updateStage.mutate(
+      { id: rfqId, data: { stage: "SOURCING" } },
+      {
+        onSuccess: () => {
+          toast.success("RFQ moved to Sourcing");
+          queryClient.invalidateQueries({ queryKey: ["/api/rfq"] });
+        },
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queueDoneForEffect, sentCountForEffect]);
 
   const allCategories = useMemo(() => {
     const set = new Set<string>();

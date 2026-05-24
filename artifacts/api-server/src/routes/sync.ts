@@ -322,6 +322,59 @@ export async function syncAccount(
   return { synced, rfqsCreated, errors };
 }
 
+// ─── Shared syncAllAccounts (used by routes + auto-sync scheduler) ─────────────
+
+export async function syncAllAccounts(log: typeof logger): Promise<{
+  totalSynced: number;
+  totalRfqs: number;
+  totalErrors: number;
+  accountResults: Array<{
+    label: string;
+    email: string;
+    synced: number;
+    rfqsCreated: number;
+    errors: number;
+    error?: string;
+  }>;
+}> {
+  const connections = await getAllZohoConnections();
+  let totalSynced = 0;
+  let totalRfqs = 0;
+  let totalErrors = 0;
+  const accountResults: Array<{
+    label: string;
+    email: string;
+    synced: number;
+    rfqsCreated: number;
+    errors: number;
+    error?: string;
+  }> = [];
+
+  for (const conn of connections) {
+    try {
+      const result = await syncAccount(conn, log);
+      totalSynced += result.synced;
+      totalRfqs += result.rfqsCreated;
+      totalErrors += result.errors;
+      accountResults.push({ label: conn.accountLabel, email: conn.email, ...result });
+    } catch (err) {
+      log.error({ err, label: conn.accountLabel }, "Account sync failed");
+      accountResults.push({
+        label: conn.accountLabel,
+        email: conn.email,
+        synced: 0,
+        rfqsCreated: 0,
+        errors: 1,
+        error: String(err),
+      });
+      totalErrors++;
+    }
+  }
+
+  log.info({ totalSynced, totalRfqs, totalErrors }, "Full sync complete");
+  return { totalSynced, totalRfqs, totalErrors, accountResults };
+}
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 router.post("/sync/run", async (req, res) => {
@@ -332,40 +385,7 @@ router.post("/sync/run", async (req, res) => {
       return;
     }
 
-    let totalSynced = 0;
-    let totalRfqs = 0;
-    let totalErrors = 0;
-    const accountResults: Array<{
-      label: string;
-      email: string;
-      synced: number;
-      rfqsCreated: number;
-      errors: number;
-      error?: string;
-    }> = [];
-
-    for (const conn of connections) {
-      try {
-        const result = await syncAccount(conn, req.log);
-        totalSynced += result.synced;
-        totalRfqs += result.rfqsCreated;
-        totalErrors += result.errors;
-        accountResults.push({ label: conn.accountLabel, email: conn.email, ...result });
-      } catch (err) {
-        req.log.error({ err, label: conn.accountLabel }, "Account sync failed");
-        accountResults.push({
-          label: conn.accountLabel,
-          email: conn.email,
-          synced: 0,
-          rfqsCreated: 0,
-          errors: 1,
-          error: String(err),
-        });
-        totalErrors++;
-      }
-    }
-
-    req.log.info({ totalSynced, totalRfqs, totalErrors }, "Full sync complete");
+    const { totalSynced, totalRfqs, accountResults } = await syncAllAccounts(req.log);
     res.json({ ok: true, synced: totalSynced, rfqsCreated: totalRfqs, accounts: accountResults });
   } catch (err) {
     req.log.error({ err }, "Sync failed");
@@ -407,8 +427,18 @@ router.get("/sync/status", async (req, res) => {
       .from(zohoConnectionsTable)
       .where(eq(zohoConnectionsTable.isActive, true));
 
+    const { getAutoSyncState } = await import("../lib/autoSync.js");
+    const autoSync = getAutoSyncState();
+
     if (rows.length === 0) {
-      res.json({ connected: false, lastSyncedAt: null });
+      res.json({
+        connected: false,
+        lastSyncedAt: null,
+        autoSyncEnabled: autoSync.enabled,
+        syncIntervalMinutes: autoSync.intervalMinutes,
+        nextSyncAt: autoSync.nextSyncAt,
+        accountErrors: autoSync.lastErrors,
+      });
       return;
     }
 
@@ -423,6 +453,10 @@ router.get("/sync/status", async (req, res) => {
       email: rows[0]!.email,
       lastSyncedAt: latestSync,
       totalAccounts: rows.length,
+      autoSyncEnabled: autoSync.enabled,
+      syncIntervalMinutes: autoSync.intervalMinutes,
+      nextSyncAt: autoSync.nextSyncAt,
+      accountErrors: autoSync.lastErrors,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get sync status");

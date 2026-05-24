@@ -20,7 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, Mail, Pencil } from "lucide-react";
+import { Plus, Trash2, RefreshCw, CheckCircle2, AlertCircle, Mail, Pencil, Clock, WifiOff } from "lucide-react";
+import { useGetSyncStatus } from "@workspace/api-client-react";
 
 const SUGGESTED_LABELS = ["Owner", "Sales", "Procurement", "Support", "Finance", "General"] as const;
 type SuggestedLabel = (typeof SUGGESTED_LABELS)[number];
@@ -45,9 +46,175 @@ export default function Settings() {
       </div>
 
       <ZohoAccountsCard />
+      <SyncSettingsCard />
       <DefaultSendersCard />
       <AISettings />
     </div>
+  );
+}
+
+// ─── Sync Settings Card ───────────────────────────────────────────────────────
+
+const INTERVAL_OPTIONS = [
+  { value: "0", label: "Disabled" },
+  { value: "5", label: "Every 5 minutes" },
+  { value: "10", label: "Every 10 minutes" },
+  { value: "15", label: "Every 15 minutes" },
+  { value: "30", label: "Every 30 minutes" },
+  { value: "60", label: "Every hour" },
+];
+
+function SyncSettingsCard() {
+  const { data: syncStatus, refetch: refetchStatus } = useGetSyncStatus(
+    { query: { refetchInterval: 30_000 } as never },
+  );
+  const { data: settingsData } = useGetSettings();
+  const updateSettings = useUpdateSettings();
+  const runSync = useRunSync();
+  const queryClient = useQueryClient();
+
+  const currentInterval = String(
+    (settingsData?.settings as Record<string, string> | undefined)?.["SYNC_INTERVAL_MINUTES"] ?? "15",
+  );
+
+  const handleIntervalChange = (value: string) => {
+    updateSettings.mutate(
+      { data: { SYNC_INTERVAL_MINUTES: value } },
+      {
+        onSuccess: () => {
+          toast.success(value === "0" ? "Auto-sync disabled" : `Auto-sync set to ${INTERVAL_OPTIONS.find(o => o.value === value)?.label?.toLowerCase()}`);
+          setTimeout(() => refetchStatus(), 800);
+        },
+        onError: () => toast.error("Failed to update sync interval"),
+      },
+    );
+  };
+
+  const handleSyncNow = () => {
+    runSync.mutate(undefined, {
+      onSuccess: (res: any) => {
+        const parts = [`Synced ${res.synced ?? 0} messages`];
+        if ((res.rfqsCreated ?? 0) > 0) parts.push(`${res.rfqsCreated} new RFQs`);
+        toast.success(parts.join(" · "));
+        refetchStatus();
+        queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+      },
+      onError: (err: any) => {
+        const msg = err?.response?.data?.error ?? "Sync failed";
+        toast.error(msg);
+      },
+    });
+  };
+
+  const status = syncStatus as any;
+  const autoEnabled: boolean = status?.autoSyncEnabled ?? false;
+  const nextSyncAt: string | null = status?.nextSyncAt ?? null;
+  const accountErrors: Array<{ label: string; email: string; error: string; isAuthError: boolean }> =
+    status?.accountErrors ?? [];
+  const authErrors = accountErrors.filter((e) => e.isAuthError);
+
+  const nextSyncLabel = nextSyncAt
+    ? new Date(nextSyncAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              Auto-Sync
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Automatically pull new emails from all connected Zoho accounts on a schedule.
+            </CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncNow}
+            disabled={runSync.isPending || !status?.connected}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${runSync.isPending ? "animate-spin" : ""}`} />
+            {runSync.isPending ? "Syncing…" : "Sync Now"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Auth error banner */}
+        {authErrors.length > 0 && (
+          <div className="flex items-start gap-2.5 p-3 rounded-md border border-destructive/40 bg-destructive/10">
+            <WifiOff className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-destructive">
+                {authErrors.length === 1
+                  ? `${authErrors[0]!.label} account needs to be reconnected`
+                  : `${authErrors.length} accounts need to be reconnected`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                The Zoho client secret is invalid or was rotated. Go to{" "}
+                <a
+                  href="https://api-console.zoho.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  api-console.zoho.com
+                </a>
+                , copy the current Client Secret, save it in Application Configuration below, then reconnect the{" "}
+                {authErrors.map((e) => e.label).join(" and ")} account
+                {authErrors.length > 1 ? "s" : ""} above.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium shrink-0">Sync interval:</label>
+            <Select value={currentInterval} onValueChange={handleIntervalChange}>
+              <SelectTrigger className="h-9 w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INTERVAL_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {autoEnabled && nextSyncLabel ? (
+              <>
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                Next sync at {nextSyncLabel}
+              </>
+            ) : currentInterval !== "0" ? (
+              <>
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Scheduler starting…
+              </>
+            ) : (
+              <>
+                <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+                Auto-sync disabled
+              </>
+            )}
+          </div>
+        </div>
+
+        {status?.lastSyncedAt && (
+          <p className="text-xs text-muted-foreground">
+            Last synced:{" "}
+            {new Date(status.lastSyncedAt).toLocaleString("en-GB", {
+              day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+            })}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -351,6 +518,7 @@ function AccountRow({
     : "Never";
 
   const tokenExpired = account.tokenExpiry ? new Date(account.tokenExpiry) < new Date() : false;
+  const needsReconnect: boolean = tokenExpired || account.hasWriteScope === false;
 
   const commitLabel = () => {
     const next = draft.trim();
@@ -383,7 +551,7 @@ function AccountRow({
     <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-muted/20">
       <div className="flex items-center gap-3 min-w-0">
         <div className="flex items-center gap-1.5 shrink-0">
-          {tokenExpired ? (
+          {needsReconnect ? (
             <AlertCircle className="w-4 h-4 text-amber-500" />
           ) : (
             <CheckCircle2 className="w-4 h-4 text-green-500" />
@@ -441,7 +609,7 @@ function AccountRow({
             <Pencil className="w-3.5 h-3.5 mr-1" /> Edit label
           </Button>
         )}
-        {account.hasWriteScope === false && (
+        {needsReconnect && (
           <Button
             variant="outline"
             size="sm"

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './accountSyncError';
 export * from './aiBrainCommandRecord';
 export * from './aiBrainCommandsList';
 export * from './aiCommandDraft';
@@ -118,5 +119,6 @@ export * from './threadsResponse';
 export * from './websiteSummaryResult';
 export * from './zohoAccount';
 export * from './zohoAccountLabelUpdate';
+export * from './zohoAccountScopes';
 export * from './zohoAuthUrl';
 export * from './zohoStatus';
