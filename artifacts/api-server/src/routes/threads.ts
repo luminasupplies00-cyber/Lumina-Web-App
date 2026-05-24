@@ -622,7 +622,36 @@ router.get("/threads/:id/attachments/:attId", async (req, res) => {
     const dl = await downloadAttachment(conn, messageId, attId, folderId);
     const filename = att?.name ?? dl.filename ?? "attachment";
     const inline = req.query["inline"] === "1" || req.query["inline"] === "true";
-    res.setHeader("Content-Type", dl.contentType);
+    // Zoho often returns application/octet-stream which forces browsers to
+    // download even when Content-Disposition is "inline". For inline viewing,
+    // infer a real MIME type from the file extension or stored attachment type.
+    const extMime = (() => {
+      const ext = filename.toLowerCase().split(".").pop() ?? "";
+      const map: Record<string, string> = {
+        pdf: "application/pdf",
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+        svg: "image/svg+xml",
+        bmp: "image/bmp",
+        txt: "text/plain; charset=utf-8",
+        csv: "text/csv; charset=utf-8",
+        html: "text/html; charset=utf-8",
+        htm: "text/html; charset=utf-8",
+        json: "application/json",
+        xml: "application/xml",
+        mp4: "video/mp4",
+        webm: "video/webm",
+        mp3: "audio/mpeg",
+        wav: "audio/wav",
+      };
+      return map[ext];
+    })();
+    const isOctet = /octet-stream/i.test(dl.contentType);
+    const effectiveType = (isOctet && extMime) ? extMime : (att?.type && /\//.test(att.type) ? att.type : dl.contentType);
+    res.setHeader("Content-Type", effectiveType);
     const disposition = inline ? "inline" : "attachment";
     res.setHeader("Content-Disposition", `${disposition}; filename="${filename.replace(/"/g, "")}"`);
     // Allow inline viewing in a new browser tab (PDFs, images, etc.)
