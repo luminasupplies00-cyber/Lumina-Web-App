@@ -193,26 +193,18 @@ function ConversationView({
                 {m.toAddress && (
                   <div className="text-[11px] text-muted-foreground">To: {m.toAddress}</div>
                 )}
-                {m.bodyHtml ? (
-                  <div
-                    className="text-sm prose-email max-w-none [&_a]:text-cyan-400 [&_a]:underline [&_img]:max-w-full [&_table]:max-w-full [&_table]:text-xs [&_*]:!font-sans"
-                    // eslint-disable-next-line react/no-danger
-                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(m.bodyHtml, SANITIZE_OPTS) }}
-                  />
-                ) : m.bodyText ? (
-                  <pre className="text-sm whitespace-pre-wrap font-sans text-foreground/90">{m.bodyText}</pre>
-                ) : (
-                  <div className="text-xs text-muted-foreground italic">No body content.</div>
-                )}
                 {m.attachments.length > 0 && (
-                  <div className="pt-1 space-y-1">
+                  <div className="rounded border border-border bg-muted/20 p-2 space-y-1">
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <Paperclip className="h-3 w-3" /> Attachments ({m.attachments.length})
+                    </div>
                     {m.attachments.map((a) => (
                       <a
                         key={a.attachmentId}
                         href={`${apiBase}/threads/${threadId}/attachments/${a.attachmentId}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-between p-1.5 rounded border border-border hover:bg-muted/30 text-xs"
+                        className="flex items-center justify-between p-1.5 rounded border border-border bg-background/40 hover:bg-muted/40 text-xs"
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
                           <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -225,6 +217,17 @@ function ConversationView({
                       </a>
                     ))}
                   </div>
+                )}
+                {m.bodyHtml ? (
+                  <div
+                    className="text-sm prose-email max-w-none [&_a]:text-cyan-400 [&_a]:underline [&_img]:max-w-full [&_table]:max-w-full [&_table]:text-xs [&_*]:!font-sans"
+                    // eslint-disable-next-line react/no-danger
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(m.bodyHtml, SANITIZE_OPTS) }}
+                  />
+                ) : m.bodyText ? (
+                  <pre className="text-sm whitespace-pre-wrap font-sans text-foreground/90">{m.bodyText}</pre>
+                ) : (
+                  <div className="text-xs text-muted-foreground italic">No body content.</div>
                 )}
               </div>
             )}
@@ -558,44 +561,47 @@ export function EmailDetailSheet({
                 <div className="h-3 bg-muted/40 rounded animate-pulse w-5/6" />
                 <div className="h-3 bg-muted/40 rounded animate-pulse w-4/6" />
               </div>
-            ) : bodyHtml ? (
-              <div
-                className="text-sm prose-email max-w-none [&_a]:text-cyan-400 [&_a]:underline [&_img]:max-w-full [&_table]:max-w-full [&_table]:text-xs [&_*]:!font-sans"
-                // eslint-disable-next-line react/no-danger
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml, SANITIZE_OPTS) }}
-              />
-            ) : bodyText ? (
-              <pre className="text-sm whitespace-pre-wrap font-sans text-foreground/90">{bodyText}</pre>
             ) : (
-              <div className="text-sm text-muted-foreground italic">No body content.</div>
-            )}
-
-            {viewMode === "single" && attachments.length > 0 && (
-              <div className="border-t border-border pt-3 space-y-1.5">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  <Paperclip className="h-3 w-3" /> Attachments ({attachments.length})
-                </div>
-                <div className="space-y-1">
-                  {attachments.map((a) => (
-                    <a
-                      key={a.attachmentId}
-                      href={`${apiBase}/threads/${thread.id}/attachments/${a.attachmentId}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-between p-2 rounded border border-border hover:bg-muted/30 text-sm"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="truncate">{a.name}</span>
-                        {a.size != null && (
-                          <span className="text-xs text-muted-foreground shrink-0">{formatBytes(a.size)}</span>
-                        )}
-                      </div>
-                      <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    </a>
-                  ))}
-                </div>
-              </div>
+              <>
+                {viewMode === "single" && attachments.length > 0 && (
+                  <div className="rounded border border-border bg-muted/20 p-3 space-y-1.5">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                      <Paperclip className="h-3 w-3" /> Attachments ({attachments.length})
+                    </div>
+                    <div className="space-y-1">
+                      {attachments.map((a) => (
+                        <a
+                          key={a.attachmentId}
+                          href={`${apiBase}/threads/${thread.id}/attachments/${a.attachmentId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-between p-2 rounded border border-border bg-background/40 hover:bg-muted/40 text-sm"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">{a.name}</span>
+                            {a.size != null && (
+                              <span className="text-xs text-muted-foreground shrink-0">{formatBytes(a.size)}</span>
+                            )}
+                          </div>
+                          <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {bodyHtml ? (
+                  <div
+                    className="text-sm prose-email max-w-none [&_a]:text-cyan-400 [&_a]:underline [&_img]:max-w-full [&_table]:max-w-full [&_table]:text-xs [&_*]:!font-sans"
+                    // eslint-disable-next-line react/no-danger
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(bodyHtml, SANITIZE_OPTS) }}
+                  />
+                ) : bodyText ? (
+                  <pre className="text-sm whitespace-pre-wrap font-sans text-foreground/90">{bodyText}</pre>
+                ) : (
+                  <div className="text-sm text-muted-foreground italic">No body content.</div>
+                )}
+              </>
             )}
 
             {thread.aiReasoning && (
