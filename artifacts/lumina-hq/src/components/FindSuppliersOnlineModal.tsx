@@ -70,7 +70,10 @@ export function FindSuppliersOnlineModal({
             toast.warning("No results — try refining the search.");
           }
         },
-        onError: (err: any) => toast.error(err?.response?.data?.error || "Search failed"),
+        onError: (err: any) => {
+          const msg = err?.response?.data?.error || err?.message || "Search failed";
+          toast.error(msg, { duration: 8000 });
+        },
       }
     );
   };
@@ -81,7 +84,10 @@ export function FindSuppliersOnlineModal({
       { data: { url: r.website, supplierName: r.name } },
       {
         onSuccess: (res) => setSummary({ url: r.website!, text: res.summary }),
-        onError: () => toast.error("Failed to summarise website"),
+        onError: (err: any) => {
+          const msg = err?.response?.data?.error || err?.message || "Failed to summarise website";
+          toast.error(msg, { duration: 8000 });
+        },
       }
     );
   };

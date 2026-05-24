@@ -963,7 +963,15 @@ Rules:
     res.json({ query, results, citations, model });
   } catch (err) {
     req.log.error({ err }, "find-suppliers-online failed");
-    res.status(500).json({ error: String(err) });
+    const e = err as { isAuthError?: boolean; message?: string };
+    if (e?.isAuthError) {
+      res.status(502).json({
+        error:
+          "Perplexity rejected the API key (401). Update PERPLEXITY_API_KEY in Replit Secrets with a valid key from perplexity.ai/settings/api, then restart the API server.",
+      });
+      return;
+    }
+    res.status(500).json({ error: e?.message || String(err) });
   }
 });
 
@@ -1013,7 +1021,15 @@ Return ONLY valid JSON, no prose:
     });
   } catch (err) {
     req.log.error({ err }, "summarize-supplier-website failed");
-    res.status(500).json({ error: String(err) });
+    const e = err as { isAuthError?: boolean; message?: string };
+    if (e?.isAuthError) {
+      res.status(502).json({
+        error:
+          "Perplexity rejected the API key (401). Update PERPLEXITY_API_KEY in Replit Secrets, then restart the API server.",
+      });
+      return;
+    }
+    res.status(500).json({ error: e?.message || String(err) });
   }
 });
 

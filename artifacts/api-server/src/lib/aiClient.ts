@@ -170,7 +170,13 @@ export async function callPerplexity(opts: {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Perplexity API error ${res.status}: ${text}`);
+    const err = new Error(`Perplexity API error ${res.status}: ${text}`) as Error & {
+      status?: number;
+      isAuthError?: boolean;
+    };
+    err.status = res.status;
+    err.isAuthError = res.status === 401 || res.status === 403;
+    throw err;
   }
 
   const data = (await res.json()) as PerplexityResponse;
