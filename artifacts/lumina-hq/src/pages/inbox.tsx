@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useGetThreads,
   useCreateRfqFromThread,
@@ -162,9 +162,16 @@ export default function Inbox() {
     });
   }, [accountsData]);
 
-  // Active tab key: "All" or a Zoho accountId
-  const [activeTab, setActiveTab] = useState<string>("All");
+  // Active tab key: a Zoho accountId (no "All" — emails must stay per-account)
+  const [activeTab, setActiveTab] = useState<string>("");
   const [tabStates, setTabStates] = useState<Record<string, TabState>>({});
+
+  // Default to the first account once loaded.
+  useEffect(() => {
+    if (!activeTab && accounts.length > 0) {
+      setActiveTab(accounts[0]!.accountId);
+    }
+  }, [accounts, activeTab]);
 
   const currentState = tabStates[activeTab] ?? DEFAULT_TAB_STATE;
   const setCurrentState = (patch: Partial<TabState>) => {
@@ -177,7 +184,7 @@ export default function Inbox() {
   const queryParams: Record<string, string> = {};
   if (currentState.classification !== "All") queryParams["classification"] = currentState.classification;
   if (currentState.search) queryParams["search"] = currentState.search;
-  if (activeTab !== "All") queryParams["accountId"] = activeTab;
+  if (activeTab) queryParams["accountId"] = activeTab;
 
   const { data, isLoading } = useGetThreads(queryParams);
   const createRfq = useCreateRfqFromThread();
@@ -185,7 +192,7 @@ export default function Inbox() {
   const syncAll = useRunSync();
   const syncOne = useRunSyncForAccount();
 
-  const activeAccount = activeTab === "All" ? null : accounts.find((a) => a.accountId === activeTab) ?? null;
+  const activeAccount = accounts.find((a) => a.accountId === activeTab) ?? null;
 
   const invalidateAll = () => {
     void queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
@@ -248,7 +255,6 @@ export default function Inbox() {
   };
 
   const counts = countsData?.counts ?? {};
-  const totalCount = countsData?.total ?? 0;
   const isSyncing = syncAll.isPending || syncOne.isPending;
 
   // Email detail panel state
@@ -374,19 +380,8 @@ export default function Inbox() {
         </div>
       </div>
 
-      {/* Account tabs */}
+      {/* Account tabs — one per mailbox, no combined "All" view */}
       <div className="flex flex-wrap gap-1.5 border-b border-border pb-2">
-        <button
-          onClick={() => setActiveTab("All")}
-          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition-colors ${
-            activeTab === "All"
-              ? "bg-foreground text-background border-foreground"
-              : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"
-          }`}
-        >
-          <span className="font-medium">All</span>
-          <span className="opacity-70">({totalCount})</span>
-        </button>
         {accounts.map((acc) => {
           const isActive = activeTab === acc.accountId;
           const count = counts[acc.accountId] ?? 0;
