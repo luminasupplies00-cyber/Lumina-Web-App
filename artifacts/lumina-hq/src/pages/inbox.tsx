@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle, Trash2, X, MessagesSquare, FileText, Paperclip } from "lucide-react";
+import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle, Trash2, X, MessagesSquare, FileText, Paperclip, CheckCircle2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -556,6 +556,17 @@ export default function Inbox() {
                       confidence={(thread as { aiConfidence?: string | null }).aiConfidence}
                       reasoning={(thread as { aiReasoning?: string | null }).aiReasoning}
                     />
+                    {rfqId && (
+                      <a
+                        href={`/rfq/${rfqId}`}
+                        onClick={(e) => e.stopPropagation()}
+                        title="This email has been added to the RFQ pipeline. Click to open."
+                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25 transition-colors"
+                      >
+                        <CheckCircle2 className="h-2.5 w-2.5" />
+                        In Pipeline · #{rfqId}
+                      </a>
+                    )}
                   </div>
                   <div className={`text-sm truncate flex items-center gap-1.5 ${!isRead ? "font-semibold" : "font-medium"}`}>
                     <span className="truncate">{thread.subject}</span>
