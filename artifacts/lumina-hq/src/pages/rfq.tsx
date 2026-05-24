@@ -283,10 +283,18 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
   };
 
   const stageIndex = STAGES.indexOf(rfq.stage);
+  const knownStage = stageIndex >= 0;
   const nextStageIndex = Math.min(stageIndex + 1, STAGES.length - 1);
-  const prevStageIndex = Math.max(stageIndex - 1, 0);
-  const canAdvance = rfq.stage !== "WON" && rfq.stage !== "LOST";
-  const canGoBack = stageIndex > 0;
+  // Terminal stages (WON/LOST) re-open to FOLLOW_UP, not to their linear
+  // neighbour — linear index would send LOST → WON, which is nonsense.
+  const REOPEN_TARGET: Record<string, (typeof STAGES)[number]> = {
+    WON: "FOLLOW_UP",
+    LOST: "FOLLOW_UP",
+  };
+  const prevStage: (typeof STAGES)[number] =
+    REOPEN_TARGET[rfq.stage] ?? STAGES[Math.max(stageIndex - 1, 0)];
+  const canAdvance = knownStage && rfq.stage !== "WON" && rfq.stage !== "LOST";
+  const canGoBack = knownStage && stageIndex > 0;
 
   return (
     <>
@@ -304,8 +312,15 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
         )}
 
         <div className="flex justify-between items-start gap-2">
-          <div className="font-semibold text-sm truncate text-card-foreground leading-tight flex-1 min-w-0">
-            {rfq.customerCompany || rfq.customerName || "Unknown"}
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm truncate text-card-foreground leading-tight">
+              {rfq.customerCompany || rfq.customerName || "Unknown"}
+            </div>
+            {rfq.customerCompany && rfq.customerName && rfq.customerName !== rfq.customerCompany && (
+              <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
+                {rfq.customerName}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {rfq.hasAttachments && rfq.threadDbId && (
@@ -376,14 +391,14 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
             {/* Always available: advance stage */}
             {(canAdvance || canGoBack) && (
               <div className="flex gap-1.5">
-                {canGoBack && (
+                {canGoBack && canAdvance && (
                   <Button
                     size="sm"
                     variant="ghost"
                     className="text-xs h-7 px-2 text-muted-foreground"
-                    onClick={() => handleStageChange(STAGES[prevStageIndex])}
+                    onClick={() => handleStageChange(prevStage)}
                     disabled={updateStage.isPending}
-                    title={`Move back to ${STAGE_LABELS[STAGES[prevStageIndex]]}`}
+                    title={`Move back to ${STAGE_LABELS[prevStage]}`}
                   >
                     <ChevronRight className="w-3 h-3 rotate-180" />
                   </Button>
@@ -405,10 +420,10 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
                     size="sm"
                     variant="secondary"
                     className="flex-1 text-xs h-7"
-                    onClick={() => handleStageChange(STAGES[prevStageIndex])}
+                    onClick={() => handleStageChange(prevStage)}
                     disabled={updateStage.isPending}
                   >
-                    Re-open to {STAGE_LABELS[STAGES[prevStageIndex]]}
+                    Re-open to {STAGE_LABELS[prevStage]}
                   </Button>
                 )}
               </div>

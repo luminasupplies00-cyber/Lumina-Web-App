@@ -224,25 +224,32 @@ router.post("/rfq/:id/extract-products", async (req, res) => {
     const system = `You are a procurement assistant for Lumina Supplies, a B2B laboratory supplies company in Riyadh, Saudi Arabia.
 
 Extract all laboratory/scientific products mentioned in the email AND in any attached documents (PDFs, images of quote sheets, spec sheets, photos of products).
-Return ONLY a valid JSON array. No explanation, no markdown, just the JSON array.
+ALSO extract customer identity from the email signature, letterhead, or any attached document header.
 
-For each product, also estimate a confidence level (high/medium/low) based on how clearly the item is described and where it was found.
+Return ONLY a valid JSON object. No explanation, no markdown, just the JSON object.
 
 Format:
-[
-  {
-    "product_name": "<full product name>",
-    "catalogue_number": "<cat no or null>",
-    "brand": "<brand name or null>",
-    "quantity": "<quantity and unit or null>",
-    "specifications": "<any specs or null>",
-    "source": "body|attachment",
-    "extraction_confidence": "high|medium|low"
-  }
-]
+{
+  "customer_company": "<official company / organization / institution name as it appears in signature or letterhead, or null>",
+  "customer_contact_name": "<individual person's name from signature, or null>",
+  "products": [
+    {
+      "product_name": "<full product name>",
+      "catalogue_number": "<cat no or null>",
+      "brand": "<brand name or null>",
+      "quantity": "<quantity and unit or null>",
+      "specifications": "<any specs or null>",
+      "source": "body|attachment",
+      "extraction_confidence": "high|medium|low"
+    }
+  ]
+}
 
-De-duplicate products that appear in both the email body and an attachment.
-If no products are found, return an empty array: [].`;
+Notes:
+- The COMPANY is the buying organization (university, hospital, lab, research institute, company). Prefer formal names from letterheads, signatures, or domain-derived branding over generic words like "Lab" or "Research".
+- Never put a person's name in "customer_company". If unsure of the company, return null.
+- De-duplicate products that appear in both the email body and an attachment.
+- If no products are found, return "products": [].`;
 
     // Allow many more tokens when attachments are involved — quote sheets can
     // contain 50+ line items and a truncated JSON array will fail to parse.
@@ -275,13 +282,7 @@ If no products are found, return an empty array: [].`;
       attachments: aiAttachments,
     });
 
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      res.status(422).json({ error: "AI could not extract a structured product list.", rawResponse: text });
-      return;
-    }
-
-    let products: Array<{
+    type ExtractedProduct = {
       product_name: string;
       catalogue_number?: string;
       brand?: string;
@@ -289,10 +290,30 @@ If no products are found, return an empty array: [].`;
       specifications?: string;
       source?: string;
       extraction_confidence?: string;
-    }>;
+    };
+    let products: ExtractedProduct[] = [];
+    let extractedCompany: string | null = null;
+    let extractedContactName: string | null = null;
 
+    const objMatch = text.match(/\{[\s\S]*\}/);
+    const arrMatch = text.match(/\[[\s\S]*\]/);
     try {
-      products = JSON.parse(jsonMatch[0]);
+      if (objMatch) {
+        const parsed = JSON.parse(objMatch[0]) as {
+          customer_company?: string | null;
+          customer_contact_name?: string | null;
+          products?: ExtractedProduct[];
+        };
+        products = Array.isArray(parsed.products) ? parsed.products : [];
+        extractedCompany = parsed.customer_company?.trim() || null;
+        extractedContactName = parsed.customer_contact_name?.trim() || null;
+      } else if (arrMatch) {
+        // Backward compat: AI returned a bare array (legacy prompt response)
+        products = JSON.parse(arrMatch[0]) as ExtractedProduct[];
+      } else {
+        res.status(422).json({ error: "AI could not extract a structured product list.", rawResponse: text });
+        return;
+      }
     } catch {
       res.status(422).json({ error: "AI returned malformed product data", rawResponse: text });
       return;
@@ -301,6 +322,28 @@ If no products are found, return an empty array: [].`;
     if (!Array.isArray(products) || products.length === 0) {
       res.status(422).json({ error: "No products could be extracted from this email." });
       return;
+    }
+
+    // Backfill customer identity onto the RFQ row when fields are empty or
+    // still equal to the raw sender name from the email thread. Never
+    // overwrite values the user has explicitly edited — we use the email
+    // thread's senderName as the immutable "system-provided" baseline; any
+    // divergence from it implies a user edit.
+    const updates: Partial<typeof rfqRecordsTable.$inferInsert> = {};
+    const senderNameRaw = threadRow?.senderName ?? "";
+    if (extractedCompany && (!rfq.customerCompany || rfq.customerCompany.trim().length === 0)) {
+      updates.customerCompany = extractedCompany;
+    }
+    if (
+      extractedContactName &&
+      (!rfq.customerName ||
+        rfq.customerName.trim().length === 0 ||
+        (senderNameRaw.length > 0 && rfq.customerName === senderNameRaw))
+    ) {
+      updates.customerName = extractedContactName;
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.update(rfqRecordsTable).set(updates).where(eq(rfqRecordsTable.id, rfqId));
     }
 
     await db.delete(rfqProductsTable).where(eq(rfqProductsTable.rfqId, rfqId));
