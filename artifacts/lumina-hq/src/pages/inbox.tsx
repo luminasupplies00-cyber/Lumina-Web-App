@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle, Trash2, X, MessagesSquare, FileText } from "lucide-react";
+import { Search, ArrowRight, RefreshCw, AlertTriangle, Mail, Circle, Trash2, X, MessagesSquare, FileText, Paperclip } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -557,7 +557,15 @@ export default function Inbox() {
                       reasoning={(thread as { aiReasoning?: string | null }).aiReasoning}
                     />
                   </div>
-                  <div className={`text-sm truncate ${!isRead ? "font-semibold" : "font-medium"}`}>{thread.subject}</div>
+                  <div className={`text-sm truncate flex items-center gap-1.5 ${!isRead ? "font-semibold" : "font-medium"}`}>
+                    <span className="truncate">{thread.subject}</span>
+                    {thread.hasAttachments && (
+                      <Paperclip
+                        className="h-3.5 w-3.5 text-muted-foreground shrink-0"
+                        aria-label="Has attachments"
+                      />
+                    )}
+                  </div>
                   <div className="text-xs text-muted-foreground truncate mt-0.5">{thread.snippet}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 sm:flex-col sm:items-end" onClick={(e) => e.stopPropagation()}>
