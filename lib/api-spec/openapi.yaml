@@ -21,6 +21,8 @@ tags:
     description: AI features
   - name: suppliers
     description: Supplier database
+  - name: ai_brain
+    description: AI Command Center — natural language commands and memory
 paths:
   /healthz:
     get:
@@ -1251,6 +1253,44 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SupplierPerformanceResponse"
+
+  /ai/command:
+    post:
+      operationId: runAiCommand
+      tags: [ai_brain]
+      summary: Run a natural-language command against the AI brain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiCommandInput"
+      responses:
+        "200":
+          description: Command result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiCommandResult"
+
+  /ai/brain/commands:
+    get:
+      operationId: getAiBrainCommands
+      tags: [ai_brain]
+      summary: List the most recent AI commands
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Recent commands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiBrainCommandsList"
 
 components:
   schemas:
@@ -2608,3 +2648,100 @@ components:
           type: string
         landedCostBufferPercent:
           type: number
+    AiCommandInput:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+    AiCommandResultItem:
+      type: object
+      required: [title]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        subtitle:
+          type: string
+        href:
+          type: string
+        badges:
+          type: array
+          items:
+            type: string
+    AiCommandDraft:
+      type: object
+      required: [subject, body]
+      properties:
+        subject:
+          type: string
+        body:
+          type: string
+        rfqId:
+          type: integer
+        draftKind:
+          type: string
+    AiCommandMemorySaved:
+      type: object
+      required: [category, key, value]
+      properties:
+        category:
+          type: string
+        key:
+          type: string
+        value:
+          type: string
+    AiCommandResult:
+      type: object
+      required: [intent, responseType, message]
+      properties:
+        intent:
+          type: string
+          enum: [draft, find, training, unknown]
+        responseType:
+          type: string
+          enum: [draft, list, memory_saved, message, error]
+        message:
+          type: string
+        draft:
+          $ref: "#/components/schemas/AiCommandDraft"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiCommandResultItem"
+        memorySaved:
+          $ref: "#/components/schemas/AiCommandMemorySaved"
+        suggestions:
+          type: array
+          items:
+            type: string
+        tokensUsed:
+          type: integer
+    AiBrainCommandRecord:
+      type: object
+      required: [id, commandText, success, createdAt]
+      properties:
+        id:
+          type: integer
+        commandText:
+          type: string
+        intentDetected:
+          type: string
+        responseType:
+          type: string
+        responseSummary:
+          type: string
+        success:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    AiBrainCommandsList:
+      type: object
+      required: [commands]
+      properties:
+        commands:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiBrainCommandRecord"

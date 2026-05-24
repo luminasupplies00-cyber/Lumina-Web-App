@@ -1546,3 +1546,59 @@ export const GetSupplierPerformanceResponse = zod.object({
 })
 
 
+/**
+ * @summary Run a natural-language command against the AI brain
+ */
+export const RunAiCommandBody = zod.object({
+  "text": zod.string()
+})
+
+export const RunAiCommandResponse = zod.object({
+  "intent": zod.enum(['draft', 'find', 'training', 'unknown']),
+  "responseType": zod.enum(['draft', 'list', 'memory_saved', 'message', 'error']),
+  "message": zod.string(),
+  "draft": zod.object({
+  "subject": zod.string(),
+  "body": zod.string(),
+  "rfqId": zod.number().optional(),
+  "draftKind": zod.string().optional()
+}).optional(),
+  "items": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "title": zod.string(),
+  "subtitle": zod.string().optional(),
+  "href": zod.string().optional(),
+  "badges": zod.array(zod.string()).optional()
+})).optional(),
+  "memorySaved": zod.object({
+  "category": zod.string(),
+  "key": zod.string(),
+  "value": zod.string()
+}).optional(),
+  "suggestions": zod.array(zod.string()).optional(),
+  "tokensUsed": zod.number().optional()
+})
+
+
+/**
+ * @summary List the most recent AI commands
+ */
+export const getAiBrainCommandsQueryLimitDefault = 10;
+
+export const GetAiBrainCommandsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getAiBrainCommandsQueryLimitDefault)
+})
+
+export const GetAiBrainCommandsResponse = zod.object({
+  "commands": zod.array(zod.object({
+  "id": zod.number(),
+  "commandText": zod.string(),
+  "intentDetected": zod.string().optional(),
+  "responseType": zod.string().optional(),
+  "responseSummary": zod.string().optional(),
+  "success": zod.boolean(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+

@@ -7,3 +7,6 @@ export * from "./rfqCustomerQuotes";
 export * from "./aiDrafts";
 export * from "./appSettings";
 export * from "./suppliers";
+export * from "./aiBrainMemory";
+export * from "./aiCommandsLog";
+export * from "./aiEmailTemplates";

@@ -1,4 +1,5 @@
 import { logger } from "./logger.js";
+import { withBrainContext } from "./aiBrainContext.js";
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 // Available on this account (confirmed via /v1/models):
@@ -53,9 +54,19 @@ export async function callClaude(opts: {
   maxTokens: number;
   model?: AIModel;
   attachments?: AIAttachment[];
+  /**
+   * If true, the caller's `system` prompt is sent as-is without prepending
+   * the AI brain business context. Use only for tightly scoped utility calls
+   * (e.g. the intent classifier inside the command engine) where the brain
+   * context would be noise.
+   */
+  skipBrainContext?: boolean;
 }): Promise<string> {
   const apiKey = getApiKey();
   const model = opts.model ?? AI_MODELS.CLAUDE;
+  const systemPrompt = opts.skipBrainContext
+    ? opts.system
+    : await withBrainContext(opts.system);
 
   // Build user content: any attachments (images / PDFs) first, then a text block.
   let userContent: string | ClaudeContentBlock[] = opts.userMessage;
@@ -81,7 +92,7 @@ export async function callClaude(opts: {
   const body: ClaudeRequest = {
     model,
     max_tokens: opts.maxTokens,
-    system: opts.system,
+    system: systemPrompt,
     messages: [{ role: "user", content: userContent }],
   };
 
@@ -119,6 +130,7 @@ export async function callAI(opts: {
   maxTokens: number;
   model?: AIModel;
   attachments?: AIAttachment[];
+  skipBrainContext?: boolean;
 }): Promise<{ text: string; model: string }> {
   const model = opts.model ?? AI_MODELS.CLAUDE;
   const text = await callClaude({ ...opts, model });

@@ -20,6 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AiBrainCommandsList,
+  AiCommandInput,
+  AiCommandResult,
   ArchiveThread200,
   BackfillRfqsFromThreads200,
   BulkSupplierContactsInput,
@@ -40,6 +43,7 @@ import type {
   FindSuppliersResult,
   FollowupDraftResponse,
   FullEmailResponse,
+  GetAiBrainCommandsParams,
   GetSuppliersParams,
   GetThreadCounts200,
   GetThreadsParams,
@@ -4514,6 +4518,161 @@ export function useGetSupplierPerformance<TData = Awaited<ReturnType<typeof getS
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSupplierPerformanceQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRunAiCommandUrl = () => {
+
+
+
+
+  return `/api/ai/command`
+}
+
+/**
+ * @summary Run a natural-language command against the AI brain
+ */
+export const runAiCommand = async (aiCommandInput: AiCommandInput, options?: RequestInit): Promise<AiCommandResult> => {
+
+  return customFetch<AiCommandResult>(getRunAiCommandUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      aiCommandInput,)
+  }
+);}
+
+
+
+
+export const getRunAiCommandMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runAiCommand>>, TError,{data: BodyType<AiCommandInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runAiCommand>>, TError,{data: BodyType<AiCommandInput>}, TContext> => {
+
+const mutationKey = ['runAiCommand'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runAiCommand>>, {data: BodyType<AiCommandInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runAiCommand(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunAiCommandMutationResult = NonNullable<Awaited<ReturnType<typeof runAiCommand>>>
+    export type RunAiCommandMutationBody = BodyType<AiCommandInput>
+    export type RunAiCommandMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Run a natural-language command against the AI brain
+ */
+export const useRunAiCommand = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runAiCommand>>, TError,{data: BodyType<AiCommandInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runAiCommand>>,
+        TError,
+        {data: BodyType<AiCommandInput>},
+        TContext
+      > => {
+      return useMutation(getRunAiCommandMutationOptions(options));
+    }
+
+export const getGetAiBrainCommandsUrl = (params?: GetAiBrainCommandsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/brain/commands?${stringifiedParams}` : `/api/ai/brain/commands`
+}
+
+/**
+ * @summary List the most recent AI commands
+ */
+export const getAiBrainCommands = async (params?: GetAiBrainCommandsParams, options?: RequestInit): Promise<AiBrainCommandsList> => {
+
+  return customFetch<AiBrainCommandsList>(getGetAiBrainCommandsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAiBrainCommandsQueryKey = (params?: GetAiBrainCommandsParams,) => {
+    return [
+    `/api/ai/brain/commands`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAiBrainCommandsQueryOptions = <TData = Awaited<ReturnType<typeof getAiBrainCommands>>, TError = ErrorType<unknown>>(params?: GetAiBrainCommandsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAiBrainCommands>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAiBrainCommandsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAiBrainCommands>>> = ({ signal }) => getAiBrainCommands(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAiBrainCommands>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAiBrainCommandsQueryResult = NonNullable<Awaited<ReturnType<typeof getAiBrainCommands>>>
+export type GetAiBrainCommandsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List the most recent AI commands
+ */
+
+export function useGetAiBrainCommands<TData = Awaited<ReturnType<typeof getAiBrainCommands>>, TError = ErrorType<unknown>>(
+ params?: GetAiBrainCommandsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAiBrainCommands>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAiBrainCommandsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

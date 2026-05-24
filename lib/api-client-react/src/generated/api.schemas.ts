@@ -851,6 +851,77 @@ export interface ComparisonResponse {
   landedCostBufferPercent?: number;
 }
 
+export interface AiCommandInput {
+  text: string;
+}
+
+export interface AiCommandResultItem {
+  id?: number;
+  title: string;
+  subtitle?: string;
+  href?: string;
+  badges?: string[];
+}
+
+export interface AiCommandDraft {
+  subject: string;
+  body: string;
+  rfqId?: number;
+  draftKind?: string;
+}
+
+export interface AiCommandMemorySaved {
+  category: string;
+  key: string;
+  value: string;
+}
+
+export type AiCommandResultIntent = typeof AiCommandResultIntent[keyof typeof AiCommandResultIntent];
+
+
+export const AiCommandResultIntent = {
+  draft: 'draft',
+  find: 'find',
+  training: 'training',
+  unknown: 'unknown',
+} as const;
+
+export type AiCommandResultResponseType = typeof AiCommandResultResponseType[keyof typeof AiCommandResultResponseType];
+
+
+export const AiCommandResultResponseType = {
+  draft: 'draft',
+  list: 'list',
+  memory_saved: 'memory_saved',
+  message: 'message',
+  error: 'error',
+} as const;
+
+export interface AiCommandResult {
+  intent: AiCommandResultIntent;
+  responseType: AiCommandResultResponseType;
+  message: string;
+  draft?: AiCommandDraft;
+  items?: AiCommandResultItem[];
+  memorySaved?: AiCommandMemorySaved;
+  suggestions?: string[];
+  tokensUsed?: number;
+}
+
+export interface AiBrainCommandRecord {
+  id: number;
+  commandText: string;
+  intentDetected?: string;
+  responseType?: string;
+  responseSummary?: string;
+  success: boolean;
+  createdAt: string;
+}
+
+export interface AiBrainCommandsList {
+  commands: AiBrainCommandRecord[];
+}
+
 export type GetZohoAuthUrlParams = {
 /**
  * Account label (Owner, Sales, Procurement, etc.)
@@ -920,5 +991,9 @@ export type ReclassifyAll200 = {
 export type GetSuppliersParams = {
 includeInactive?: boolean;
 category?: string;
+};
+
+export type GetAiBrainCommandsParams = {
+limit?: number;
 };
 

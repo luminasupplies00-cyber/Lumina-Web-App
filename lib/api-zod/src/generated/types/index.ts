@@ -6,6 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './aiBrainCommandRecord';
+export * from './aiBrainCommandsList';
+export * from './aiCommandDraft';
+export * from './aiCommandInput';
+export * from './aiCommandMemorySaved';
+export * from './aiCommandResult';
+export * from './aiCommandResultIntent';
+export * from './aiCommandResultItem';
+export * from './aiCommandResultResponseType';
 export * from './archiveThread200';
 export * from './backfillRfqsFromThreads200';
 export * from './bulkSupplierContactsInput';
@@ -34,6 +43,7 @@ export * from './findSuppliersOnlineResult';
 export * from './findSuppliersResult';
 export * from './followupDraftResponse';
 export * from './fullEmailResponse';
+export * from './getAiBrainCommandsParams';
 export * from './getSuppliersParams';
 export * from './getThreadCounts200';
 export * from './getThreadCounts200Counts';

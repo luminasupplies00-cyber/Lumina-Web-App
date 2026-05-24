@@ -4,6 +4,7 @@ import { LayoutDashboard, Inbox as InboxIcon, Settings as SettingsIcon, Zap, Bui
 import { useGetSyncStatus, useRunSync } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
+import { AICommandRoot } from "@/components/AICommandBar";
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -17,6 +18,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      <AICommandRoot />
     </div>
   );
 }
