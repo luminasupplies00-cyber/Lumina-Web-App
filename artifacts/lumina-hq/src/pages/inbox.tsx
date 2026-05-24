@@ -558,7 +558,7 @@ export default function Inbox() {
                     />
                     {rfqId && (
                       <a
-                        href={`/rfq/${rfqId}`}
+                        href={`/rfq?focus=${rfqId}`}
                         onClick={(e) => e.stopPropagation()}
                         title="This email has been added to the RFQ pipeline. Click to open."
                         className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25 transition-colors"
@@ -607,7 +607,7 @@ export default function Inbox() {
                     )}
                     {rfqId && (
                       <Button variant="outline" size="sm" asChild onClick={(e) => e.stopPropagation()}>
-                        <a href={`/rfq/${rfqId}`}>
+                        <a href={`/rfq?focus=${rfqId}`}>
                           <ArrowRight className="h-3 w-3 mr-1" /> Open RFQ
                         </a>
                       </Button>

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearch, useLocation } from "wouter";
 import {
   useGetRfqs,
   useUpdateRfqStage,
@@ -47,6 +48,19 @@ const STAGE_LABELS: Record<string, string> = {
 
 export default function Pipeline() {
   const { data, isLoading, error } = useGetRfqs();
+  const search = useSearch();
+  const [, setLocation] = useLocation();
+  const focusParam = new URLSearchParams(search).get("focus");
+  const focusedRfqId = focusParam ? Number(focusParam) : null;
+
+  // Clear the focus param from the URL once consumed so a refresh doesn't keep re-focusing.
+  useEffect(() => {
+    if (focusedRfqId != null) {
+      const t = setTimeout(() => setLocation("/rfq", { replace: true }), 1500);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [focusedRfqId, setLocation]);
 
   if (isLoading) return <PipelineSkeleton />;
   if (error) return <div className="p-4 text-destructive">Failed to load pipeline data.</div>;
@@ -79,7 +93,7 @@ export default function Pipeline() {
             </div>
             <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
               {(data.rfqs[stage] || []).map((rfq: any) => (
-                <RfqCard key={rfq.id} rfq={rfq} />
+                <RfqCard key={rfq.id} rfq={rfq} focused={focusedRfqId === rfq.id} />
               ))}
             </div>
           </div>
@@ -185,9 +199,20 @@ function RfqAttachmentsPopover({
   );
 }
 
-function RfqCard({ rfq }: { rfq: any }) {
-  const [expanded, setExpanded] = useState(false);
+function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
+  const [expanded, setExpanded] = useState(focused);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [highlight, setHighlight] = useState(false);
+
+  useEffect(() => {
+    if (!focused) return;
+    setExpanded(true);
+    setHighlight(true);
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => setHighlight(false), 2000);
+    return () => clearTimeout(t);
+  }, [focused]);
 
   const queryClient = useQueryClient();
   const updateStage = useUpdateRfqStage();
@@ -261,7 +286,8 @@ function RfqCard({ rfq }: { rfq: any }) {
   return (
     <>
       <Card
-        className={`p-3 cursor-pointer hover:border-primary/40 transition-colors flex flex-col gap-2.5 bg-card border-border ${rfq.isStuck ? "border-amber-500/50" : ""}`}
+        ref={cardRef}
+        className={`p-3 cursor-pointer hover:border-primary/40 transition-colors flex flex-col gap-2.5 bg-card border-border ${rfq.isStuck ? "border-amber-500/50" : ""} ${highlight ? "ring-2 ring-cyan-400 shadow-[0_0_24px_rgba(34,211,238,0.35)]" : ""}`}
         onClick={() => setExpanded(!expanded)}
       >
         {/* Stuck banner */}
