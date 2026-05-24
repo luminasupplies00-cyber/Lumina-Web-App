@@ -453,10 +453,12 @@ export async function downloadAttachment(
   conn: DecryptedZohoConnection,
   messageId: string,
   attachmentId: string,
+  folderId: string,
 ): Promise<{ buffer: Buffer; contentType: string; filename?: string }> {
+  // Zoho Mail attachment download requires the folderId in the path.
   return zohoGetBinaryForConnection(
     conn,
-    `/accounts/${conn.accountId}/messages/${messageId}/attachments/${attachmentId}`,
+    `/accounts/${conn.accountId}/folders/${folderId}/messages/${messageId}/attachments/${attachmentId}`,
   );
 }
 

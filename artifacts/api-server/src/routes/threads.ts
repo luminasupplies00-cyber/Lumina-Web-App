@@ -610,7 +610,16 @@ router.get("/threads/:id/attachments/:attId", async (req, res) => {
       return;
     }
     const att = (thread.attachments ?? []).find((a) => a.attachmentId === attId);
-    const dl = await downloadAttachment(conn, extractMessageId(thread.threadId), attId);
+    const messageId = extractMessageId(thread.threadId);
+    let folderId = thread.folderId;
+    if (!folderId) {
+      folderId = await findMessageFolderId(conn, messageId);
+      if (!folderId) {
+        res.status(404).json({ error: "Folder for this message could not be resolved" });
+        return;
+      }
+    }
+    const dl = await downloadAttachment(conn, messageId, attId, folderId);
     const filename = att?.name ?? dl.filename ?? "attachment";
     const inline = req.query["inline"] === "1" || req.query["inline"] === "true";
     res.setHeader("Content-Type", dl.contentType);

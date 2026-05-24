@@ -51,7 +51,10 @@ import { ComposeModal, type ComposeInitial } from "./ComposeModal";
 const SANITIZE_OPTS = {
   FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input", "button", "meta", "link"],
   FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur", "formaction"],
-  ALLOW_DATA_ATTR: false,
+  ALLOW_DATA_ATTR: true,
+  // Keep <img> with src so external/inline images render in emails.
+  ADD_TAGS: ["img"],
+  ADD_ATTR: ["src", "srcset", "alt", "width", "height", "style", "cid"],
 };
 
 interface EmailThreadLite {
