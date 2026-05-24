@@ -411,6 +411,8 @@ function AISettings() {
       ANTHROPIC_API_KEY: "",
       PERPLEXITY_API_KEY: "",
       AI_MODEL: "claude-sonnet-4-5",
+      RFQ_TABLE_SMALL_MAX: "5",
+      RFQ_TABLE_MEDIUM_MAX: "15",
     },
   });
 
@@ -424,9 +426,29 @@ function AISettings() {
         ANTHROPIC_API_KEY: settingsData.settings.ANTHROPIC_API_KEY || "",
         PERPLEXITY_API_KEY: settingsData.settings.PERPLEXITY_API_KEY || "",
         AI_MODEL: settingsData.settings.AI_MODEL || "claude-sonnet-4-5",
+        RFQ_TABLE_SMALL_MAX: settingsData.settings.RFQ_TABLE_SMALL_MAX || "5",
+        RFQ_TABLE_MEDIUM_MAX: settingsData.settings.RFQ_TABLE_MEDIUM_MAX || "15",
       });
     }
   }, [settingsData, form]);
+
+  const onSubmitValidated = (data: any) => {
+    const small = parseInt(data.RFQ_TABLE_SMALL_MAX, 10);
+    const medium = parseInt(data.RFQ_TABLE_MEDIUM_MAX, 10);
+    if (!Number.isFinite(small) || small < 1) {
+      toast.error("Small-list threshold must be a positive number");
+      return;
+    }
+    if (!Number.isFinite(medium) || medium <= small) {
+      toast.error("Medium-list threshold must be greater than the small-list threshold");
+      return;
+    }
+    onSubmit({
+      ...data,
+      RFQ_TABLE_SMALL_MAX: String(small),
+      RFQ_TABLE_MEDIUM_MAX: String(medium),
+    });
+  };
 
   const onSubmit = (data: any) => {
     updateSettings.mutate(
@@ -447,7 +469,7 @@ function AISettings() {
         <CardDescription>API keys and credentials for Lumina HQ.</CardDescription>
       </CardHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form onSubmit={form.handleSubmit(onSubmitValidated)}>
           <CardContent className="space-y-6">
             <div className="space-y-4">
               <h3 className="text-sm font-medium border-b border-border pb-2">AI Models</h3>
@@ -497,6 +519,42 @@ function AISettings() {
                           <SelectItem value="sonar-reasoning">Sonar Reasoning</SelectItem>
                         </SelectContent>
                       </Select>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4 pt-2">
+              <h3 className="text-sm font-medium border-b border-border pb-2">Supplier Email Format</h3>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Controls how products are presented in supplier inquiry emails based on the number of line items.
+                Lists at or below the small threshold show an inline table only (no attachment).
+                Lists between the two thresholds show an inline table plus an Excel attachment.
+                Lists above the medium threshold show only a brief summary with the Excel attached.
+              </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="RFQ_TABLE_SMALL_MAX"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Small list — table only (max items)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={1} max={200} {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="RFQ_TABLE_MEDIUM_MAX"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Medium list — table + Excel (max items)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={2} max={500} {...field} />
+                      </FormControl>
                     </FormItem>
                   )}
                 />

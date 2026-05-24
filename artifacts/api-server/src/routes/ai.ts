@@ -499,31 +499,28 @@ router.post("/rfq/:id/draft-supplier", async (req, res) => {
 
 The email must:
 - Have a professional, concise business tone
-- Include a formatted product table with columns: Product | Cat No | Brand | Qty | Specifications
+- Briefly mention what kind of items are being requested (one short sentence is enough)
 - Request: unit price (SAR preferred), lead time, MOQ, and quote validity
 - End with a professional closing from Lumina Supplies
+- Leave a clearly-marked placeholder line "{{PRODUCTS_BLOCK}}" on its own line where the product list / table / attachment reference should go — the system will inject the correct format afterwards based on the number of items.
 
-Do not use HTML. Plain text email format only.`;
+Do NOT enumerate the products yourself, do NOT generate a Markdown or ASCII table, and do NOT mention an attachment unless instructed. Plain text only, no HTML.`;
 
-    const productTable =
-      products.length > 0
-        ? products
-            .map(
-              (p, i) =>
-                `${i + 1}. ${p.productName} | ${p.catalogueNumber ?? "N/A"} | ${p.brand ?? "N/A"} | ${p.quantity ?? "N/A"} | ${p.specifications ?? "N/A"}`,
-            )
-            .join("\n")
-        : "Products to be specified";
+    const productSummary = products.length > 0
+      ? `${products.length} line item${products.length === 1 ? "" : "s"} (e.g. ${products
+          .slice(0, 3)
+          .map((p) => p.productName)
+          .join("; ")}${products.length > 3 ? "; …" : ""})`
+      : "items to be specified";
 
     const userMessage = `Client inquiry context:
 Customer: ${rfq.customerName}${rfq.customerCompany ? ` from ${rfq.customerCompany}` : ""}
 Urgency: ${rfq.urgency ?? rfq.intentSignal ?? "standard"}
 ${rfq.deadline ? `Deadline: ${rfq.deadline}` : ""}
 
-Products needed:
-${productTable}
+Request summary: ${productSummary}
 
-Please draft the supplier inquiry email.`;
+Please draft the supplier inquiry email. Remember to include the literal placeholder line {{PRODUCTS_BLOCK}} where the items should go.`;
 
     const { text, model } = await callAI({ system, userMessage, maxTokens: AI_MAX_TOKENS.SUPPLIER_DRAFT });
 

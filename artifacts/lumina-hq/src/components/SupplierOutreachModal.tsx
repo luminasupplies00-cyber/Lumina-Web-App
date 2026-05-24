@@ -6,7 +6,14 @@ import {
   useCreateSupplier,
   useBulkCreateSupplierContacts,
   useMarkDraftCopied,
+  useGetSettings,
 } from "@workspace/api-client-react";
+import {
+  formatProductBlock,
+  injectProductBlock,
+  parseThresholds,
+  type FormatMode,
+} from "@/lib/rfqFormatRules";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -39,12 +46,33 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
 
   const { data: suggested } = useGetSuggestedSuppliers(rfqId);
   const { data: allSuppliers } = useGetSuppliers();
+  const { data: settingsData } = useGetSettings();
   const suppliers = allSuppliers?.suppliers ?? [];
+
+  const thresholds = useMemo(
+    () => parseThresholds(settingsData?.settings as Record<string, string> | undefined),
+    [settingsData],
+  );
+  const format = useMemo(
+    () => formatProductBlock(rfq.products ?? [], thresholds),
+    [rfq.products, thresholds],
+  );
+  const FORMAT_LABEL: Record<FormatMode, string> = {
+    "table-only": "Inline table only",
+    "table-with-excel": "Inline table + Excel attachment",
+    "summary-with-excel": "Brief summary + Excel attachment",
+  };
 
   const [subject, setSubject] = useState(
     rfq.emailSubject ? `RE: ${rfq.emailSubject} — Quote Request` : `Quote Request — RFQ #${rfqId}`,
   );
+  // We keep the raw AI draft (containing the {{PRODUCTS_BLOCK}} placeholder)
+  // separate from the user-visible body. Whenever format.block changes
+  // (thresholds load, product count changes), the body is re-derived — but
+  // only while the user hasn't manually edited it.
+  const [rawDraft, setRawDraft] = useState<string | null>(null);
   const [body, setBody] = useState("");
+  const [bodyEdited, setBodyEdited] = useState(false);
   const [draftId, setDraftId] = useState<number | undefined>(undefined);
   const [mode, setMode] = useState<"separate" | "bcc">("separate");
   const [selected, setSelected] = useState<Record<string, Picked>>({});
@@ -55,14 +83,14 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
   const [adhoc, setAdhoc] = useState({ name: "", email: "" });
   const [copied, setCopied] = useState(false);
 
-  // 1. Generate the AI draft on open
+  // 1. Generate the AI draft on open (once per open/rfq)
   useEffect(() => {
-    if (!isOpen || body) return;
+    if (!isOpen || rawDraft !== null) return;
     draftSupplier.mutate(
       { id: rfqId },
       {
         onSuccess: (res) => {
-          setBody(res.draft);
+          setRawDraft(res.draft);
           setDraftId(res.draftId ?? undefined);
         },
         onError: () => toast.error("Failed to draft supplier email"),
@@ -70,6 +98,14 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, rfqId]);
+
+  // 1b. Re-inject the product block whenever the raw draft or the format
+  // changes — unless the user has edited the body, in which case we leave
+  // it alone (their edits win).
+  useEffect(() => {
+    if (rawDraft === null || bodyEdited) return;
+    setBody(injectProductBlock(rawDraft, format.block));
+  }, [rawDraft, format.block, bodyEdited]);
 
   // 2. Pre-select suggested suppliers once they load
   useEffect(() => {
@@ -177,7 +213,10 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
     const header = mode === "bcc"
       ? `To: <yourself>\nBcc: ${emailList}\n`
       : `To: ${emailList}\n(Send each recipient separately in Zoho)\n`;
-    const clipboard = `${header}Subject: ${subject}\n\n${body}\n\n— Attach the Excel file downloaded alongside this email.`;
+    const footer = format.includeExcel
+      ? "\n\n— Attach the Excel file downloaded alongside this email."
+      : "";
+    const clipboard = `${header}Subject: ${subject}\n\n${body}${footer}`;
 
     try {
       await navigator.clipboard.writeText(clipboard);
@@ -215,11 +254,13 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
       },
     );
 
-    // 4. Download the Excel automatically
-    handleDownloadExcel();
+    // 4. Download the Excel automatically when this RFQ qualifies for an attachment
+    if (format.includeExcel) {
+      handleDownloadExcel();
+    }
   };
 
-  const productCount = rfq.products?.length ?? 0;
+  const productCount = format.productCount;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -229,7 +270,10 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
             <Bot className="w-4 h-4" /> Source Suppliers — RFQ #{rfqId}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Edit the AI draft, pick suppliers, then copy &amp; send via Zoho. {productCount} product{productCount === 1 ? "" : "s"} will be attached as Excel.
+            Edit the AI draft, pick suppliers, then copy &amp; send via Zoho.{" "}
+            <span className="text-foreground">
+              {productCount} product{productCount === 1 ? "" : "s"} · {FORMAT_LABEL[format.mode]}
+            </span>
           </DialogDescription>
         </DialogHeader>
 
@@ -255,22 +299,31 @@ export function SupplierOutreachModal({ isOpen, rfqId, rfq, onClose }: Props) {
               </div>
               <Textarea
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
+                onChange={(e) => {
+                  setBody(e.target.value);
+                  setBodyEdited(true);
+                }}
                 placeholder="AI draft will appear here…"
                 className="flex-1 mt-0.5 font-mono text-xs leading-relaxed resize-none"
               />
             </div>
 
-            <div className="flex items-center justify-between bg-muted/40 border border-border rounded p-2">
-              <div className="flex items-center gap-2 text-xs">
-                <Download className="w-3.5 h-3.5 text-primary" />
-                <span className="font-medium">Excel attachment</span>
-                <span className="text-muted-foreground">— {productCount} products</span>
+            {format.includeExcel ? (
+              <div className="flex items-center justify-between bg-muted/40 border border-border rounded p-2">
+                <div className="flex items-center gap-2 text-xs">
+                  <Download className="w-3.5 h-3.5 text-primary" />
+                  <span className="font-medium">Excel attachment</span>
+                  <span className="text-muted-foreground">— {productCount} products</span>
+                </div>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDownloadExcel}>
+                  Download .xlsx
+                </Button>
               </div>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDownloadExcel}>
-                Download .xlsx
-              </Button>
-            </div>
+            ) : (
+              <div className="text-[11px] text-muted-foreground italic px-1">
+                Short list — products are shown inline in the email body. No attachment needed.
+              </div>
+            )}
           </div>
 
           {/* RIGHT — supplier selector */}
