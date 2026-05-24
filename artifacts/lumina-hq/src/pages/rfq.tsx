@@ -282,8 +282,11 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
     );
   };
 
-  const nextStageIndex = Math.min(STAGES.indexOf(rfq.stage) + 1, STAGES.length - 1);
+  const stageIndex = STAGES.indexOf(rfq.stage);
+  const nextStageIndex = Math.min(stageIndex + 1, STAGES.length - 1);
+  const prevStageIndex = Math.max(stageIndex - 1, 0);
   const canAdvance = rfq.stage !== "WON" && rfq.stage !== "LOST";
+  const canGoBack = stageIndex > 0;
 
   return (
     <>
@@ -371,17 +374,44 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
         {expanded && (
           <div className="pt-2 flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
             {/* Always available: advance stage */}
-            {canAdvance && (
-              <Button
-                size="sm"
-                variant="secondary"
-                className="w-full text-xs h-7"
-                onClick={() => handleStageChange(STAGES[nextStageIndex])}
-                disabled={updateStage.isPending}
-              >
-                Move to {STAGE_LABELS[STAGES[nextStageIndex]]}
-                <ChevronRight className="w-3 h-3 ml-1" />
-              </Button>
+            {(canAdvance || canGoBack) && (
+              <div className="flex gap-1.5">
+                {canGoBack && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs h-7 px-2 text-muted-foreground"
+                    onClick={() => handleStageChange(STAGES[prevStageIndex])}
+                    disabled={updateStage.isPending}
+                    title={`Move back to ${STAGE_LABELS[STAGES[prevStageIndex]]}`}
+                  >
+                    <ChevronRight className="w-3 h-3 rotate-180" />
+                  </Button>
+                )}
+                {canAdvance && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="flex-1 text-xs h-7"
+                    onClick={() => handleStageChange(STAGES[nextStageIndex])}
+                    disabled={updateStage.isPending}
+                  >
+                    Move to {STAGE_LABELS[STAGES[nextStageIndex]]}
+                    <ChevronRight className="w-3 h-3 ml-1" />
+                  </Button>
+                )}
+                {!canAdvance && canGoBack && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="flex-1 text-xs h-7"
+                    onClick={() => handleStageChange(STAGES[prevStageIndex])}
+                    disabled={updateStage.isPending}
+                  >
+                    Re-open to {STAGE_LABELS[STAGES[prevStageIndex]]}
+                  </Button>
+                )}
+              </div>
             )}
 
             {/* NEW: extract products */}
