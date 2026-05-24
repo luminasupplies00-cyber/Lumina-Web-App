@@ -28,6 +28,10 @@ export const emailThreadsTable = pgTable("email_threads", {
   isRead: boolean("is_read").notNull().default(false),
   hasAttachments: boolean("has_attachments").notNull().default(false),
   attachments: jsonb("attachments").$type<EmailAttachment[]>().default([]).notNull(),
+  // When non-null, the attachments array was confirmed against Zoho's
+  // /attachmentinfo endpoint. Used to invalidate legacy cached rows where
+  // attachments may have been stored as [] from a buggy fetch.
+  attachmentsVerifiedAt: timestamp("attachments_verified_at", { withTimezone: true }),
   attachmentParsed: boolean("attachment_parsed").notNull().default(false),
   attachmentType: text("attachment_type"),
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),

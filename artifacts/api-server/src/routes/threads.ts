@@ -302,10 +302,10 @@ router.get("/threads/:id/full", async (req, res) => {
     // presence of bodyHtml OR a non-empty bodyText (after first fetch) as a
     // cached state. Empty HTML emails (plaintext-only) would otherwise re-fetch
     // every open.
-    // Cache is invalid if hasAttachments was reported true but we stored an
-    // empty attachments array (legacy rows from before the attachmentinfo fix).
-    const storedAtt = (thread.attachments ?? []) as unknown[];
-    const attachmentsCacheStale = thread.hasAttachments === true && storedAtt.length === 0;
+    // Cache is invalid if we have never confirmed the attachments list against
+    // Zoho's /attachmentinfo endpoint (legacy rows where attachments may have
+    // been wrongly stored as [] from a buggy fetch).
+    const attachmentsCacheStale = thread.attachmentsVerifiedAt == null;
     const isCached = thread.bodyHtml !== null && thread.bodyHtml !== undefined && !attachmentsCacheStale;
     const messageId = extractMessageId(thread.threadId);
 
@@ -365,6 +365,7 @@ router.get("/threads/:id/full", async (req, res) => {
         // sources agree there are none. This avoids a transient
         // /attachmentinfo failure clearing the flag and re-poisoning the cache.
         hasAttachments: detail.attachments.length > 0 || thread.hasAttachments === true,
+        attachmentsVerifiedAt: new Date(),
         isRead: true,
       })
       .where(eq(emailThreadsTable.id, id));
