@@ -117,11 +117,22 @@ router.get("/auth/zoho/callback", async (req, res) => {
       expires_in?: number;
       scope?: string;
       error?: string;
+      error_description?: string;
+      message?: string;
+      status?: string | number;
     };
 
     if (!tokenData.access_token || !tokenData.refresh_token) {
+      // Zoho uses different error keys depending on the error type — capture all of them.
+      const zohoReason =
+        tokenData.error_description ??
+        tokenData.error ??
+        tokenData.message ??
+        (tokenData.status ? String(tokenData.status) : null) ??
+        JSON.stringify(tokenData);
+      req.log.error({ tokenData }, "Zoho token exchange returned no tokens");
       res.status(502).json({
-        error: `Zoho token response missing tokens: ${tokenData.error ?? "unknown error"}`,
+        error: `Zoho token exchange failed: ${zohoReason}`,
       });
       return;
     }
