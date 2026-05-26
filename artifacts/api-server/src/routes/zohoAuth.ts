@@ -122,15 +122,17 @@ router.get("/auth/zoho/callback", async (req, res) => {
       status?: string | number;
     };
 
-    if (!tokenData.access_token || !tokenData.refresh_token) {
-      // Zoho uses different error keys depending on the error type — capture all of them.
+    // Zoho only returns a refresh_token on the VERY FIRST authorization of an
+    // OAuth app. Every subsequent reconnect (re-consent) returns only an
+    // access_token. If there's no access_token at all, that's a real error.
+    if (!tokenData.access_token) {
       const zohoReason =
         tokenData.error_description ??
         tokenData.error ??
         tokenData.message ??
         (tokenData.status ? String(tokenData.status) : null) ??
         JSON.stringify(tokenData);
-      req.log.error({ tokenData }, "Zoho token exchange returned no tokens");
+      req.log.error({ tokenData }, "Zoho token exchange returned no access_token");
       res.status(502).json({
         error: `Zoho token exchange failed: ${zohoReason}`,
       });
@@ -165,36 +167,65 @@ router.get("/auth/zoho/callback", async (req, res) => {
       }
     }
 
-    // Upsert: if same accountId exists, update it; otherwise insert
+    // Upsert: if same accountId exists, update it; otherwise insert.
+    // IMPORTANT: Zoho omits refresh_token on every reconnect after the first
+    // grant — only the initial authorization includes it. When absent, reuse
+    // the encrypted refresh token already stored for this account. If there is
+    // no existing row AND Zoho didn't provide a refresh_token, we cannot
+    // complete the connection (token refresh will never work).
     const existing = await db
-      .select({ id: zohoConnectionsTable.id })
+      .select({ id: zohoConnectionsTable.id, refreshToken: zohoConnectionsTable.refreshToken })
       .from(zohoConnectionsTable)
       .where(eq(zohoConnectionsTable.accountId, accountId))
       .limit(1);
 
     const grantedScope = tokenData.scope ?? null;
+    const newRefreshToken = tokenData.refresh_token;
 
     if (existing[0]) {
+      // Use new refresh token if Zoho gave one, otherwise keep the stored one.
+      const refreshTokenToStore = newRefreshToken
+        ? encrypt(newRefreshToken)
+        : existing[0].refreshToken; // already encrypted in DB
+
       await db
         .update(zohoConnectionsTable)
         .set({
           email,
           accountLabel,
           accessToken: encrypt(tokenData.access_token),
-          refreshToken: encrypt(tokenData.refresh_token),
+          refreshToken: refreshTokenToStore,
           tokenExpiry,
           accountsDomain,
           scope: grantedScope,
           isActive: true,
         })
         .where(eq(zohoConnectionsTable.accountId, accountId));
+
+      req.log.info(
+        { accountId, email, accountLabel, hadNewRefreshToken: !!newRefreshToken },
+        "Zoho account reconnected",
+      );
     } else {
+      // First-time connection — refresh_token is required.
+      if (!newRefreshToken) {
+        req.log.error(
+          { accountId, email },
+          "Zoho returned no refresh_token and no existing connection found — cannot connect",
+        );
+        res.status(502).json({
+          error:
+            "Zoho did not return a refresh token and this account has no prior connection. " +
+            "Revoke the app's access in Zoho (My Account → Connected Apps), then reconnect.",
+        });
+        return;
+      }
       await db.insert(zohoConnectionsTable).values({
         accountId,
         email,
         accountLabel,
         accessToken: encrypt(tokenData.access_token),
-        refreshToken: encrypt(tokenData.refresh_token),
+        refreshToken: encrypt(newRefreshToken),
         tokenExpiry,
         accountsDomain,
         scope: grantedScope,
