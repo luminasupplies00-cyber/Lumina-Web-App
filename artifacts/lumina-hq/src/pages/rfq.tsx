@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { SupplierOutreachModal } from "@/components/SupplierOutreachModal";
 import { FindSuppliersOnlineModal } from "@/components/FindSuppliersOnlineModal";
+import { AutopilotPanel } from "@/components/AutopilotPanel";
 import { useUpdateSupplierContactStatus, useDraftSupplierFollowup } from "@workspace/api-client-react";
 
 const STAGES = ["NEW", "SOURCING", "COMPARING", "QUOTE_READY", "QUOTE_SENT", "FOLLOW_UP", "WON", "LOST"];
@@ -70,7 +71,12 @@ export default function Pipeline() {
   if (!data) return null;
 
   return (
-    <div className="space-y-6 flex flex-col h-full overflow-hidden">
+    <div className="space-y-4 flex flex-col h-full overflow-hidden">
+      {/* AI Autopilot Panel */}
+      <div className="shrink-0">
+        <AutopilotPanel />
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 shrink-0">
         <MetricCard label="New Today" value={data.metrics.newToday} />
         <MetricCard label="In Sourcing" value={data.metrics.inSourcing} />
@@ -202,6 +208,22 @@ function RfqAttachmentsPopover({
   );
 }
 
+function PriorityBadge({ score }: { score: number }) {
+  let colorClass = "bg-green-500/15 text-green-400 border-green-500/25";
+  if (score >= 80) colorClass = "bg-red-500/15 text-red-400 border-red-500/25";
+  else if (score >= 60) colorClass = "bg-orange-500/15 text-orange-400 border-orange-500/25";
+  else if (score >= 40) colorClass = "bg-yellow-500/15 text-yellow-400 border-yellow-500/25";
+
+  return (
+    <span
+      className={`text-[9px] font-bold px-1.5 py-0 h-4 rounded-sm border inline-flex items-center shrink-0 ${colorClass}`}
+      title={`Priority: ${score}/100`}
+    >
+      {score}
+    </span>
+  );
+}
+
 function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
   const [expanded, setExpanded] = useState(focused);
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -313,8 +335,11 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
 
         <div className="flex justify-between items-start gap-2">
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm truncate text-card-foreground leading-tight">
-              {rfq.customerCompany || rfq.customerName || "Unknown"}
+            <div className="flex items-center gap-1.5">
+              <div className="font-semibold text-sm truncate text-card-foreground leading-tight flex-1">
+                {rfq.customerCompany || rfq.customerName || "Unknown"}
+              </div>
+              {rfq.priorityScore != null && <PriorityBadge score={rfq.priorityScore} />}
             </div>
             {rfq.customerCompany && rfq.customerName && rfq.customerName !== rfq.customerCompany && (
               <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
@@ -367,7 +392,14 @@ function RfqCard({ rfq, focused = false }: { rfq: any; focused?: boolean }) {
           )}
         </div>
 
-        {rfq.aiNextAction && (
+        {rfq.nextAction && (
+          <div className="bg-primary/10 text-primary text-[10px] px-2 py-1.5 rounded border border-primary/20 flex items-start gap-1.5 leading-tight">
+            <Bot className="w-3 h-3 shrink-0 mt-0.5" />
+            <span>{rfq.nextAction}{rfq.nextActionReason ? ` — ${rfq.nextActionReason}` : ""}</span>
+          </div>
+        )}
+
+        {!rfq.nextAction && rfq.aiNextAction && (
           <div className="bg-primary/10 text-primary text-[10px] px-2 py-1.5 rounded border border-primary/20 flex items-start gap-1.5 leading-tight">
             <Bot className="w-3 h-3 shrink-0 mt-0.5" />
             <span>{rfq.aiNextAction}</span>

@@ -262,6 +262,14 @@ export interface RfqRecord {
   lostReason?: string | null;
   /** @nullable */
   landedCostBufferPercent?: string | null;
+  /** @nullable */
+  priorityScore?: number | null;
+  /** @nullable */
+  priorityReason?: string | null;
+  /** @nullable */
+  nextAction?: string | null;
+  /** @nullable */
+  nextActionReason?: string | null;
   isStuck?: boolean;
   /** @nullable */
   stuckSince?: string | null;
@@ -945,6 +953,98 @@ export interface AiBrainCommandsList {
   commands: AiBrainCommandRecord[];
 }
 
+export interface AutopilotStats {
+  totalCycles: number;
+  lastCycleActions: number;
+  lastCycleDurationMs: number;
+  extractionsTriggered: number;
+  stuckAlerts: number;
+  followupSuggestions: number;
+  priorityScores: number;
+  stageAdvances: number;
+}
+
+export interface AutopilotStatus {
+  enabled: boolean;
+  intervalMinutes: number;
+  /** @nullable */
+  lastRunAt?: string | null;
+  /** @nullable */
+  nextRunAt?: string | null;
+  running: boolean;
+  stats: AutopilotStats;
+}
+
+export interface AutopilotRunResult {
+  ok: boolean;
+  actions: number;
+  durationMs: number;
+}
+
+export type AutopilotActionActionType = typeof AutopilotActionActionType[keyof typeof AutopilotActionActionType];
+
+
+export const AutopilotActionActionType = {
+  auto_extract: 'auto_extract',
+  priority_score: 'priority_score',
+  stuck_alert: 'stuck_alert',
+  followup_suggestion: 'followup_suggestion',
+  stage_advance: 'stage_advance',
+  daily_briefing: 'daily_briefing',
+} as const;
+
+export type AutopilotActionPayload = { [key: string]: unknown };
+
+export type AutopilotActionStatus = typeof AutopilotActionStatus[keyof typeof AutopilotActionStatus];
+
+
+export const AutopilotActionStatus = {
+  pending: 'pending',
+  completed: 'completed',
+  dismissed: 'dismissed',
+  failed: 'failed',
+} as const;
+
+export interface AutopilotAction {
+  id: number;
+  /** @nullable */
+  rfqId?: number | null;
+  actionType: AutopilotActionActionType;
+  payload: AutopilotActionPayload;
+  status: AutopilotActionStatus;
+  createdAt: string;
+  /** @nullable */
+  completedAt?: string | null;
+}
+
+export interface AutopilotActionsResponse {
+  actions: AutopilotAction[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AutopilotActionDismissed {
+  ok: boolean;
+  action: AutopilotAction;
+}
+
+export interface AutopilotBriefing {
+  briefing: string;
+}
+
+export interface AutopilotToggleInput {
+  enabled: boolean;
+}
+
+export interface AutopilotToggleResult {
+  ok: boolean;
+  enabled: boolean;
+  intervalMinutes: number;
+  /** @nullable */
+  nextRunAt?: string | null;
+}
+
 export type GetZohoAuthUrlParams = {
 /**
  * Account label (Owner, Sales, Procurement, etc.)
@@ -1018,5 +1118,10 @@ category?: string;
 
 export type GetAiBrainCommandsParams = {
 limit?: number;
+};
+
+export type GetAutopilotActionsParams = {
+limit?: number;
+offset?: number;
 };
 

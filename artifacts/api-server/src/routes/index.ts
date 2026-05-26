@@ -10,6 +10,7 @@ import suppliersRouter from "./suppliers.js";
 import supplierContactsRouter from "./supplierContacts.js";
 import mailSendRouter from "./mailSend.js";
 import aiCommandRouter from "./aiCommand.js";
+import autopilotRouter from "./autopilot.js";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(suppliersRouter);
 router.use(supplierContactsRouter);
 router.use(mailSendRouter);
 router.use(aiCommandRouter);
+router.use(autopilotRouter);
 
 export default router;

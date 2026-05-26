@@ -94,13 +94,16 @@ router.get("/rfq", async (req, res) => {
     for (const rfq of rfqsWithProducts) {
       const stage = rfq.stage as RfqStage;
       if (grouped[stage]) {
-        // Stuck RFQs sort to the top within their stage
-        if (rfq.isStuck) {
-          grouped[stage]!.unshift(rfq);
-        } else {
-          grouped[stage]!.push(rfq);
-        }
+        grouped[stage]!.push(rfq);
       }
+    }
+    // Sort within each stage: stuck first, then by priority score (high → low)
+    for (const stage of RFQ_STAGES) {
+      grouped[stage]?.sort((a, b) => {
+        if (a.isStuck && !b.isStuck) return -1;
+        if (!a.isStuck && b.isStuck) return 1;
+        return (b.priorityScore ?? 0) - (a.priorityScore ?? 0);
+      });
     }
 
     const now = new Date();

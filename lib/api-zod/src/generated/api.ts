@@ -527,6 +527,10 @@ export const GetRfqsResponse = zod.object({
   "extractionReviewedAt": zod.string().nullish(),
   "lostReason": zod.string().nullish(),
   "landedCostBufferPercent": zod.string().nullish(),
+  "priorityScore": zod.number().nullish(),
+  "priorityReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "nextActionReason": zod.string().nullish(),
   "isStuck": zod.boolean().optional(),
   "stuckSince": zod.string().nullish(),
   "stageUpdatedAt": zod.string(),
@@ -630,6 +634,10 @@ export const GetRfqResponse = zod.object({
   "extractionReviewedAt": zod.string().nullish(),
   "lostReason": zod.string().nullish(),
   "landedCostBufferPercent": zod.string().nullish(),
+  "priorityScore": zod.number().nullish(),
+  "priorityReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "nextActionReason": zod.string().nullish(),
   "isStuck": zod.boolean().optional(),
   "stuckSince": zod.string().nullish(),
   "stageUpdatedAt": zod.string(),
@@ -746,6 +754,10 @@ export const UpdateRfqResponse = zod.object({
   "extractionReviewedAt": zod.string().nullish(),
   "lostReason": zod.string().nullish(),
   "landedCostBufferPercent": zod.string().nullish(),
+  "priorityScore": zod.number().nullish(),
+  "priorityReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "nextActionReason": zod.string().nullish(),
   "isStuck": zod.boolean().optional(),
   "stuckSince": zod.string().nullish(),
   "stageUpdatedAt": zod.string(),
@@ -799,6 +811,10 @@ export const UpdateRfqStageResponse = zod.object({
   "extractionReviewedAt": zod.string().nullish(),
   "lostReason": zod.string().nullish(),
   "landedCostBufferPercent": zod.string().nullish(),
+  "priorityScore": zod.number().nullish(),
+  "priorityReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "nextActionReason": zod.string().nullish(),
   "isStuck": zod.boolean().optional(),
   "stuckSince": zod.string().nullish(),
   "stageUpdatedAt": zod.string(),
@@ -873,6 +889,10 @@ export const ConfirmExtractionResponse = zod.object({
   "extractionReviewedAt": zod.string().nullish(),
   "lostReason": zod.string().nullish(),
   "landedCostBufferPercent": zod.string().nullish(),
+  "priorityScore": zod.number().nullish(),
+  "priorityReason": zod.string().nullish(),
+  "nextAction": zod.string().nullish(),
+  "nextActionReason": zod.string().nullish(),
   "isStuck": zod.boolean().optional(),
   "stuckSince": zod.string().nullish(),
   "stageUpdatedAt": zod.string(),
@@ -1622,6 +1642,109 @@ export const GetAiBrainCommandsResponse = zod.object({
   "success": zod.boolean(),
   "createdAt": zod.coerce.date()
 }))
+})
+
+
+/**
+ * @summary Get current autopilot state
+ */
+export const GetAutopilotStatusResponse = zod.object({
+  "enabled": zod.boolean(),
+  "intervalMinutes": zod.number(),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "running": zod.boolean(),
+  "stats": zod.object({
+  "totalCycles": zod.number(),
+  "lastCycleActions": zod.number(),
+  "lastCycleDurationMs": zod.number(),
+  "extractionsTriggered": zod.number(),
+  "stuckAlerts": zod.number(),
+  "followupSuggestions": zod.number(),
+  "priorityScores": zod.number(),
+  "stageAdvances": zod.number()
+})
+})
+
+
+/**
+ * @summary Trigger a manual autopilot cycle
+ */
+export const RunAutopilotCycleResponse = zod.object({
+  "ok": zod.boolean(),
+  "actions": zod.number(),
+  "durationMs": zod.number()
+})
+
+
+/**
+ * @summary List recent autopilot actions
+ */
+export const getAutopilotActionsQueryLimitDefault = 50;
+export const getAutopilotActionsQueryOffsetDefault = 0;
+
+export const GetAutopilotActionsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getAutopilotActionsQueryLimitDefault),
+  "offset": zod.coerce.number().default(getAutopilotActionsQueryOffsetDefault)
+})
+
+export const GetAutopilotActionsResponse = zod.object({
+  "actions": zod.array(zod.object({
+  "id": zod.number(),
+  "rfqId": zod.number().nullish(),
+  "actionType": zod.enum(['auto_extract', 'priority_score', 'stuck_alert', 'followup_suggestion', 'stage_advance', 'daily_briefing']),
+  "payload": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['pending', 'completed', 'dismissed', 'failed']),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullish()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Dismiss an autopilot suggestion
+ */
+export const DismissAutopilotActionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DismissAutopilotActionResponse = zod.object({
+  "ok": zod.boolean(),
+  "action": zod.object({
+  "id": zod.number(),
+  "rfqId": zod.number().nullish(),
+  "actionType": zod.enum(['auto_extract', 'priority_score', 'stuck_alert', 'followup_suggestion', 'stage_advance', 'daily_briefing']),
+  "payload": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['pending', 'completed', 'dismissed', 'failed']),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullish()
+})
+})
+
+
+/**
+ * @summary Get AI-generated daily briefing
+ */
+export const GetAutopilotBriefingResponse = zod.object({
+  "briefing": zod.string()
+})
+
+
+/**
+ * @summary Enable or disable autopilot
+ */
+export const ToggleAutopilotBody = zod.object({
+  "enabled": zod.boolean()
+})
+
+export const ToggleAutopilotResponse = zod.object({
+  "ok": zod.boolean(),
+  "enabled": zod.boolean(),
+  "intervalMinutes": zod.number(),
+  "nextRunAt": zod.coerce.date().nullish()
 })
 
 

@@ -68,6 +68,11 @@ export const rfqRecordsTable = pgTable("rfq_records", {
 
   landedCostBufferPercent: numeric("landed_cost_buffer_percent", { precision: 5, scale: 2 }).notNull().default("8"),
 
+  priorityScore: integer("priority_score"),
+  priorityReason: text("priority_reason"),
+  nextAction: text("next_action"),
+  nextActionReason: text("next_action_reason"),
+
   isStuck: boolean("is_stuck").notNull().default(false),
   stuckSince: timestamp("stuck_since", { withTimezone: true }),
 

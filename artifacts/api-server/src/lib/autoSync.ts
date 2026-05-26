@@ -95,6 +95,21 @@ async function runSync(): Promise<void> {
           r.error!.toLowerCase().includes("reconnect required"),
         failedAt: new Date(),
       }));
+    // After sync completes, trigger an autopilot cycle if enabled
+    try {
+      const { runAutopilotCycle, getAutopilotState } = await import("./autopilot.js");
+      const autopilotState = getAutopilotState();
+      if (autopilotState.enabled) {
+        logger.info("Auto-sync: triggering post-sync autopilot cycle");
+        const apResult = await runAutopilotCycle();
+        logger.info(
+          { actions: apResult.actions, durationMs: apResult.durationMs },
+          "Auto-sync: post-sync autopilot cycle complete",
+        );
+      }
+    } catch (apErr) {
+      logger.warn({ err: apErr }, "Auto-sync: post-sync autopilot cycle failed");
+    }
   } catch (err) {
     logger.error({ err }, "Auto-sync: uncaught error");
   }

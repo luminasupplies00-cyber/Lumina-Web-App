@@ -23,6 +23,8 @@ tags:
     description: Supplier database
   - name: ai_brain
     description: AI Command Center — natural language commands and memory
+  - name: autopilot
+    description: AI Autopilot engine — background processor, priority scoring, smart suggestions
 paths:
   /healthz:
     get:
@@ -1314,6 +1316,107 @@ paths:
               schema:
                 $ref: "#/components/schemas/AiBrainCommandsList"
 
+  /autopilot/status:
+    get:
+      operationId: getAutopilotStatus
+      tags: [autopilot]
+      summary: Get current autopilot state
+      responses:
+        "200":
+          description: Autopilot status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotStatus"
+
+  /autopilot/run:
+    post:
+      operationId: runAutopilotCycle
+      tags: [autopilot]
+      summary: Trigger a manual autopilot cycle
+      responses:
+        "200":
+          description: Cycle result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotRunResult"
+
+  /autopilot/actions:
+    get:
+      operationId: getAutopilotActions
+      tags: [autopilot]
+      summary: List recent autopilot actions
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated actions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotActionsResponse"
+
+  /autopilot/actions/{id}/dismiss:
+    post:
+      operationId: dismissAutopilotAction
+      tags: [autopilot]
+      summary: Dismiss an autopilot suggestion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotActionDismissed"
+
+  /autopilot/briefing:
+    get:
+      operationId: getAutopilotBriefing
+      tags: [autopilot]
+      summary: Get AI-generated daily briefing
+      responses:
+        "200":
+          description: Daily briefing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotBriefing"
+
+  /autopilot/toggle:
+    post:
+      operationId: toggleAutopilot
+      tags: [autopilot]
+      summary: Enable or disable autopilot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotToggleInput"
+      responses:
+        "200":
+          description: Toggle result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotToggleResult"
+
 components:
   schemas:
     HealthStatus:
@@ -1700,6 +1803,14 @@ components:
         lostReason:
           type: ["string", "null"]
         landedCostBufferPercent:
+          type: ["string", "null"]
+        priorityScore:
+          type: ["integer", "null"]
+        priorityReason:
+          type: ["string", "null"]
+        nextAction:
+          type: ["string", "null"]
+        nextActionReason:
           type: ["string", "null"]
         isStuck:
           type: boolean
@@ -2805,3 +2916,130 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AiBrainCommandRecord"
+
+    AutopilotStats:
+      type: object
+      required: [totalCycles, lastCycleActions, lastCycleDurationMs, extractionsTriggered, stuckAlerts, followupSuggestions, priorityScores, stageAdvances]
+      properties:
+        totalCycles:
+          type: integer
+        lastCycleActions:
+          type: integer
+        lastCycleDurationMs:
+          type: integer
+        extractionsTriggered:
+          type: integer
+        stuckAlerts:
+          type: integer
+        followupSuggestions:
+          type: integer
+        priorityScores:
+          type: integer
+        stageAdvances:
+          type: integer
+
+    AutopilotStatus:
+      type: object
+      required: [enabled, intervalMinutes, running, stats]
+      properties:
+        enabled:
+          type: boolean
+        intervalMinutes:
+          type: integer
+        lastRunAt:
+          type: ["string", "null"]
+          format: date-time
+        nextRunAt:
+          type: ["string", "null"]
+          format: date-time
+        running:
+          type: boolean
+        stats:
+          $ref: "#/components/schemas/AutopilotStats"
+
+    AutopilotRunResult:
+      type: object
+      required: [ok, actions, durationMs]
+      properties:
+        ok:
+          type: boolean
+        actions:
+          type: integer
+        durationMs:
+          type: integer
+
+    AutopilotAction:
+      type: object
+      required: [id, actionType, payload, status, createdAt]
+      properties:
+        id:
+          type: integer
+        rfqId:
+          type: ["integer", "null"]
+        actionType:
+          type: string
+          enum: [auto_extract, priority_score, stuck_alert, followup_suggestion, stage_advance, daily_briefing]
+        payload:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [pending, completed, dismissed, failed]
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    AutopilotActionsResponse:
+      type: object
+      required: [actions, total, limit, offset]
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotAction"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    AutopilotActionDismissed:
+      type: object
+      required: [ok, action]
+      properties:
+        ok:
+          type: boolean
+        action:
+          $ref: "#/components/schemas/AutopilotAction"
+
+    AutopilotBriefing:
+      type: object
+      required: [briefing]
+      properties:
+        briefing:
+          type: string
+
+    AutopilotToggleInput:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+
+    AutopilotToggleResult:
+      type: object
+      required: [ok, enabled, intervalMinutes]
+      properties:
+        ok:
+          type: boolean
+        enabled:
+          type: boolean
+        intervalMinutes:
+          type: integer
+        nextRunAt:
+          type: ["string", "null"]
+          format: date-time

@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { seedAIBrainMemory } from "./lib/aiBrainSeed";
 import { startAutoSync } from "./lib/autoSync";
+import { startAutopilot } from "./lib/autopilot";
 
 const rawPort = process.env["PORT"];
 
@@ -33,5 +34,10 @@ app.listen(port, (err) => {
   // Start the auto-sync scheduler (reads SYNC_INTERVAL_MINUTES from DB).
   startAutoSync().catch((syncErr) => {
     logger.error({ err: syncErr }, "Auto-sync scheduler failed to start");
+  });
+
+  // Start the AI autopilot scheduler (reads AUTOPILOT_ENABLED from DB).
+  startAutopilot().catch((apErr) => {
+    logger.error({ err: apErr }, "Autopilot scheduler failed to start");
   });
 });

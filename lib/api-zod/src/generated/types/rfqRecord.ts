@@ -43,6 +43,14 @@ export interface RfqRecord {
   lostReason?: string | null;
   /** @nullable */
   landedCostBufferPercent?: string | null;
+  /** @nullable */
+  priorityScore?: number | null;
+  /** @nullable */
+  priorityReason?: string | null;
+  /** @nullable */
+  nextAction?: string | null;
+  /** @nullable */
+  nextActionReason?: string | null;
   isStuck?: boolean;
   /** @nullable */
   stuckSince?: string | null;
